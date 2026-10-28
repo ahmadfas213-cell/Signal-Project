@@ -34,6 +34,7 @@ type DeviceNetworkInfo = { effectiveType?: string; downlink?: number; rtt?: numb
 type GlobalProbe = { id: number; country: string; latitude: number; longitude: number; asn: number | null; status: string }
 type GlobalProbeResponse = { source: string; fetchedAt: string | null; count: number; returned: number; results: GlobalProbe[]; error: string | null; note: string }
 type CustomEndpoint = { id: string; name: string; url: string; enabled: boolean; status: "pending" | "online" | "failed" | "blocked"; latency: number | null; checkedAt: string | null; error: string | null }
+type EndpointSample = { endpointId: string; name: string; timestamp: string; status: "online" | "failed" | "blocked"; latency: number | null; error: string | null }
 type HistorySample = { timestamp: string; latency: number | null; packetLoss: number | null; traffic: number; healthScore: number | null }
 
 type NetworkData = {
@@ -119,7 +120,7 @@ function App() {
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
-  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints" | "Compare" | "SLA Lab" | "Ops Center">("Overview")
+  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints" | "Compare" | "SLA Lab" | "Ops Center" | "Reliability">("Overview")
   const [selectedTopology, setSelectedTopology] = useState("Production")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -157,6 +158,8 @@ function App() {
   const [customEndpoints, setCustomEndpoints] = useState<CustomEndpoint[]>(() => {
     try { return JSON.parse(localStorage.getItem("signal-endpoints-v1") || "[]") } catch { return [] }
   })
+  const [endpointHistory, setEndpointHistory] = useState<EndpointSample[]>(() => { try { return JSON.parse(localStorage.getItem("signal-endpoint-history-v1") || "[]") } catch { return [] } })
+  const [reliabilityWindow, setReliabilityWindow] = useState("all")
   const [endpointName, setEndpointName] = useState("")
   const [endpointUrl, setEndpointUrl] = useState("")
   const [latencyThreshold, setLatencyThreshold] = useState(() => Number(localStorage.getItem("signal-latency-threshold") || 150))
@@ -238,6 +241,7 @@ function App() {
   useEffect(() => { localStorage.setItem("signal-acknowledged-v1", JSON.stringify(acknowledgedAlerts)) }, [acknowledgedAlerts])
   useEffect(() => { localStorage.setItem("signal-alerts-muted-v1", String(alertsMuted)) }, [alertsMuted])
   useEffect(() => { localStorage.setItem("signal-endpoints-v1", JSON.stringify(customEndpoints)) }, [customEndpoints])
+  useEffect(() => { localStorage.setItem("signal-endpoint-history-v1", JSON.stringify(endpointHistory.slice(-3000))) }, [endpointHistory])
   useEffect(() => { localStorage.setItem("signal-latency-threshold", String(latencyThreshold)) }, [latencyThreshold])
   useEffect(() => { localStorage.setItem("signal-loss-threshold", String(lossThreshold)) }, [lossThreshold])
   useEffect(() => { localStorage.setItem("signal-history-v1", JSON.stringify(historySamples.slice(-500))) }, [historySamples])
@@ -251,11 +255,23 @@ function App() {
         const response = await fetch(endpoint.url, { method: "GET", mode: "cors", cache: "no-store", signal: AbortSignal.timeout(8000) })
         await response.body?.cancel()
         const checkedAt = new Date().toISOString()
-        if (!disposed) setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status: response.ok || response.status < 500 ? "online" : "failed", latency: Math.round(performance.now() - started), checkedAt, error: response.ok || response.status < 500 ? null : `HTTP ${response.status}` } : item))
+        const status = response.ok || response.status < 500 ? "online" : "failed"
+        const latency = Math.round(performance.now() - started)
+        const errorText = status === "online" ? null : `HTTP ${response.status}`
+        if (!disposed) {
+          setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status, latency, checkedAt, error: errorText } : item))
+          setEndpointHistory((current) => [...current, { endpointId: endpoint.id, name: endpoint.name, timestamp: checkedAt, status, latency, error: errorText }].slice(-3000))
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Request failed"
         const blocked = /cors|failed to fetch|networkerror/i.test(message)
-        if (!disposed) setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status: blocked ? "blocked" : "failed", latency: null, checkedAt: new Date().toISOString(), error: blocked ? "Request blocked or CORS unavailable" : message } : item))
+        const checkedAt = new Date().toISOString()
+        const status = blocked ? "blocked" : "failed"
+        const errorText = blocked ? "Request blocked or CORS unavailable" : message
+        if (!disposed) {
+          setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status, latency: null, checkedAt, error: errorText } : item))
+          setEndpointHistory((current) => [...current, { endpointId: endpoint.id, name: endpoint.name, timestamp: checkedAt, status, latency: null, error: errorText }].slice(-3000))
+        }
       }
     }
     const run = () => customEndpoints.filter((endpoint) => endpoint.enabled).forEach((endpoint) => { void check(endpoint) })
@@ -528,7 +544,7 @@ function App() {
 
 
   const commandItems = [
-    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints", "Compare", "SLA Lab", "Ops Center"] as const).map((page) => ({
+    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints", "Compare", "SLA Lab", "Ops Center", "Reliability"] as const).map((page) => ({
       label: `Open ${page}`,
       detail: "Navigate",
       keywords: page.toLowerCase(),
@@ -566,6 +582,7 @@ function App() {
             ["⇄", "Compare"],
             ["◷", "SLA Lab"],
             ["⌘", "Ops Center"],
+            ["◴", "Reliability"],
           ].map(([ico, label]) => (
             <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
@@ -1116,6 +1133,12 @@ function App() {
                 </div>
                 <div className="page-heading ops-subheading"><div><span className="eyebrow">FILTERED INCIDENT FEED</span><h2>Recent alerts</h2><p>Mark individual alerts acknowledged; acknowledged state persists locally.</p></div><span className="page-count">{alerts.filter((item) => (incidentFilter === "all" || item.tone === incidentFilter) && (item.text + " " + item.time).toLowerCase().includes(incidentSearch.toLowerCase())).length} results</span></div>
                 <div className="incident-list">{alerts.filter((item) => (incidentFilter === "all" || item.tone === incidentFilter) && (item.text + " " + item.time).toLowerCase().includes(incidentSearch.toLowerCase())).map((item, index) => { const key = item.time + "|" + item.text; const acknowledged = acknowledgedAlerts.includes(key); return <article className={`incident-card ${item.tone}`} key={key + index}><i className={`legend-dot ${item.tone === "yellow" ? "warning" : item.tone}`} /><div><strong>{item.text}</strong><small>{item.time} · {acknowledged ? "ACKNOWLEDGED" : "UNACKNOWLEDGED"}</small></div><button className="export" onClick={() => setAcknowledgedAlerts((current) => acknowledged ? current.filter((entry) => entry !== key) : [...current, key])}>{acknowledged ? "Undo ACK" : "Acknowledge"}</button></article>})}{!alerts.length && <div className="empty-state">No alerts to display yet.</div>}</div>
+              </>}
+              {activePage === "Reliability" && <>
+                <div className="page-heading"><div><span className="eyebrow">OBSERVED AVAILABILITY</span><h1>Reliability lab</h1><p>Availability and latency statistics calculated from actual endpoint checks recorded by this browser. Blocked/CORS checks are excluded from the availability denominator.</p></div><span className="page-count">{endpointHistory.length} samples</span></div>
+                <div className="reliability-toolbar"><label>Analysis window<select value={reliabilityWindow} onChange={(event) => setReliabilityWindow(event.target.value)}><option value="all">All retained history</option><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720">Last 30 days</option></select></label><button className="export" onClick={() => { const rows = [["Endpoint","URL","Samples","Successful","Failed","Blocked","Observed availability %","Average latency ms","P95 latency ms","Window"]]; customEndpoints.forEach((endpoint) => { const cutoff = reliabilityWindow === "all" ? 0 : Date.now() - Number(reliabilityWindow) * 3600000; const samples = endpointHistory.filter((sample) => sample.endpointId === endpoint.id && new Date(sample.timestamp).getTime() >= cutoff); const conclusive = samples.filter((sample) => sample.status !== "blocked"); const latencies = samples.filter((sample) => sample.latency !== null).map((sample) => sample.latency as number).sort((x,y) => x-y); const p95 = latencies.length ? latencies[Math.min(latencies.length - 1, Math.ceil(latencies.length * .95) - 1)] : ""; rows.push([endpoint.name,endpoint.url,samples.length,samples.filter((sample) => sample.status === "online").length,samples.filter((sample) => sample.status === "failed").length,samples.filter((sample) => sample.status === "blocked").length,conclusive.length ? (conclusive.filter((sample) => sample.status === "online").length / conclusive.length * 100).toFixed(3) : "",latencies.length ? (latencies.reduce((sum,value) => sum + value,0) / latencies.length).toFixed(1) : "",p95,reliabilityWindow]) }); const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"','""')}"`).join(",")).join("\\r\\n"); const url = URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); const link = document.createElement("a"); link.href=url; link.download="signal-reliability.csv"; link.click(); URL.revokeObjectURL(url) }}>⇩ Export reliability CSV</button><button className="export" onClick={() => { setEndpointHistory([]); localStorage.removeItem("signal-endpoint-history-v1") }}>Clear samples</button></div>
+                <div className="reliability-grid">{customEndpoints.map((endpoint) => { const cutoff = reliabilityWindow === "all" ? 0 : Date.now() - Number(reliabilityWindow) * 3600000; const samples = endpointHistory.filter((sample) => sample.endpointId === endpoint.id && new Date(sample.timestamp).getTime() >= cutoff); const conclusive = samples.filter((sample) => sample.status !== "blocked"); const success = conclusive.filter((sample) => sample.status === "online").length; const failures = conclusive.filter((sample) => sample.status === "failed").length; const latencies = samples.filter((sample) => sample.latency !== null).map((sample) => sample.latency as number).sort((x,y) => x-y); const avg = latencies.length ? Math.round(latencies.reduce((sum,value) => sum + value,0) / latencies.length) : null; const p95 = latencies.length ? latencies[Math.min(latencies.length - 1, Math.ceil(latencies.length * .95) - 1)] : null; const availability = conclusive.length ? success / conclusive.length * 100 : null; return <article className="reliability-card" key={endpoint.id}><header><div><strong>{endpoint.name}</strong><small>{endpoint.url}</small></div><span className={endpoint.status}>{endpoint.status.toUpperCase()}</span></header><div className="reliability-main"><strong>{availability === null ? "—" : availability.toFixed(2) + "%"}</strong><span>Observed availability</span></div><div className="reliability-metrics"><div><span>Samples</span><strong>{samples.length}</strong></div><div><span>Failures</span><strong>{failures}</strong></div><div><span>Blocked</span><strong>{samples.filter((sample) => sample.status === "blocked").length}</strong></div><div><span>Avg latency</span><strong>{avg === null ? "—" : avg + " ms"}</strong></div><div><span>P95 latency</span><strong>{p95 === null ? "—" : p95 + " ms"}</strong></div></div><div className="reliability-strip">{samples.slice(-48).map((sample,index) => <span key={sample.timestamp + index} title={new Date(sample.timestamp).toLocaleString() + " · " + sample.status + (sample.latency === null ? "" : " · " + sample.latency + " ms")} className={sample.status} />)}</div><small>First sample: {samples[0] ? new Date(samples[0].timestamp).toLocaleString() : "No samples yet"} · Last sample: {samples.at(-1) ? new Date(samples.at(-1)!.timestamp).toLocaleString() : "No samples yet"}</small></article> })}{!customEndpoints.length && <div className="empty-state">Add endpoints in Endpoint Monitor to build reliability history.</div>}</div>
+                <div className="diagnostic-card"><strong>How to read these numbers</strong><p>Availability = successful checks ÷ (successful + failed checks). Blocked/CORS requests are excluded because the browser cannot confirm whether the remote service is up. P95 is the response time at or below which 95% of measured latencies fall. History is stored locally, capped at 3,000 total samples, and only accumulates while this dashboard is open. It is not a contractual uptime SLA.</p></div>
               </>}
               {activePage === "Nodes" && <>
                 <div className="page-heading"><div><span className="eyebrow">TOPOLOGY INVENTORY</span><h1>Network nodes</h1><p>Node status and performance for {selectedTopology}.</p></div><span className="page-count">{nodes.length} nodes</span></div>
