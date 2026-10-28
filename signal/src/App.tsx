@@ -119,7 +119,7 @@ function App() {
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
-  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints" | "Compare" | "SLA Lab">("Overview")
+  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints" | "Compare" | "SLA Lab" | "Ops Center">("Overview")
   const [selectedTopology, setSelectedTopology] = useState("Production")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -165,6 +165,13 @@ function App() {
     try { return JSON.parse(localStorage.getItem("signal-history-v1") || "[]") } catch { return [] }
   })
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [incidentSearch, setIncidentSearch] = useState("")
+  const [incidentFilter, setIncidentFilter] = useState("all")
+  const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("signal-acknowledged-v1") || "[]") } catch { return [] }
+  })
+  const [alertsMuted, setAlertsMuted] = useState(() => localStorage.getItem("signal-alerts-muted-v1") === "true")
+  const [importStatus, setImportStatus] = useState("")
   const lastHistorySaved = useRef(0)
   const thresholdState = useRef({ latency: false, loss: false })
 
@@ -228,6 +235,8 @@ function App() {
   const previousRuntime = useRef<Record<string, Runtime>>(initialRuntime)
 
   useEffect(() => { localStorage.setItem("signal-alerts-v1", JSON.stringify(alerts.slice(0, 100))) }, [alerts])
+  useEffect(() => { localStorage.setItem("signal-acknowledged-v1", JSON.stringify(acknowledgedAlerts)) }, [acknowledgedAlerts])
+  useEffect(() => { localStorage.setItem("signal-alerts-muted-v1", String(alertsMuted)) }, [alertsMuted])
   useEffect(() => { localStorage.setItem("signal-endpoints-v1", JSON.stringify(customEndpoints)) }, [customEndpoints])
   useEffect(() => { localStorage.setItem("signal-latency-threshold", String(latencyThreshold)) }, [latencyThreshold])
   useEffect(() => { localStorage.setItem("signal-loss-threshold", String(lossThreshold)) }, [lossThreshold])
@@ -266,7 +275,7 @@ function App() {
       const timestamp = new Date().toLocaleTimeString("en-GB")
       setAlerts((current) => [...fired.map((text) => ({ tone: "red", text, time: timestamp })), ...current].slice(0, 100))
       setEventLog((current) => [...fired.map((text) => ({ tone: "red", text: `ALERT: ${text}`, time: timestamp })), ...current].slice(0, 100))
-      if (notificationsEnabled && "Notification" in window && Notification.permission === "granted") fired.forEach((text) => new Notification("SIGNAL threshold alert", { body: text }))
+      if (!alertsMuted && notificationsEnabled && "Notification" in window && Notification.permission === "granted") fired.forEach((text) => new Notification("SIGNAL threshold alert", { body: text }))
     }
   }, [network.latency, network.packetLoss, latencyThreshold, lossThreshold, notificationsEnabled])
 
@@ -519,7 +528,7 @@ function App() {
 
 
   const commandItems = [
-    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints", "Compare", "SLA Lab"] as const).map((page) => ({
+    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints", "Compare", "SLA Lab", "Ops Center"] as const).map((page) => ({
       label: `Open ${page}`,
       detail: "Navigate",
       keywords: page.toLowerCase(),
@@ -556,6 +565,7 @@ function App() {
             ["⌁", "Endpoints"],
             ["⇄", "Compare"],
             ["◷", "SLA Lab"],
+            ["⌘", "Ops Center"],
           ].map(([ico, label]) => (
             <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
@@ -1089,6 +1099,23 @@ function App() {
                   })}
                 </div>
                 <div className="diagnostic-card"><strong>How this is calculated</strong><p>Allowed downtime = period duration × (1 − availability target). For example, 99.9% over 30 days permits 43.2 minutes of downtime. Actual SLA measurement depends on the contract's definition of downtime, exclusions, and monitoring method.</p></div>
+              </>}
+              {activePage === "Ops Center" && <>
+                <div className="page-heading"><div><span className="eyebrow">OPERATIONS TOOLKIT</span><h1>Ops Center</h1><p>Ten practical controls for alerts, endpoints, and portable diagnostics. Local settings stay in this browser.</p></div><span className="page-count">10 tools</span></div>
+                <div className="ops-grid">
+                  <article className="ops-card"><span className="eyebrow">01 · INCIDENT SEARCH</span><h3>Find an alert</h3><input value={incidentSearch} onChange={(event) => setIncidentSearch(event.target.value)} placeholder="Search alert text or time" aria-label="Search alerts" /><small>Filters incident records as you type.</small></article>
+                  <article className="ops-card"><span className="eyebrow">02 · SEVERITY FILTER</span><h3>Filter by severity</h3><select value={incidentFilter} onChange={(event) => setIncidentFilter(event.target.value)} aria-label="Filter alert severity"><option value="all">All severities</option><option value="red">Critical</option><option value="yellow">Warning</option><option value="green">Healthy / recovery</option></select><small>{alerts.filter((item) => incidentFilter === "all" || item.tone === incidentFilter).length} matching alerts.</small></article>
+                  <article className="ops-card"><span className="eyebrow">03 · ACKNOWLEDGEMENTS</span><h3>Review alerts</h3><strong className="ops-number">{acknowledgedAlerts.length}</strong><small>Alert signatures acknowledged on this browser.</small><button className="export" onClick={() => { const pending = alerts.filter((item) => !acknowledgedAlerts.includes(item.time + "|" + item.text)); setAcknowledgedAlerts((current) => [...new Set([...current, ...pending.map((item) => item.time + "|" + item.text)])]); setDiagnostic(`Acknowledged ${pending.length} visible alerts`) }}>Acknowledge all</button></article>
+                  <article className="ops-card"><span className="eyebrow">04 · ALERT SILENCE</span><h3>Notification silence</h3><strong className="ops-number">{alertsMuted ? "SILENCED" : "ACTIVE"}</strong><small>Controls browser desktop notifications, not telemetry collection.</small><button className="export" onClick={() => setAlertsMuted((value) => !value)}>{alertsMuted ? "Resume notifications" : "Silence notifications"}</button></article>
+                  <article className="ops-card"><span className="eyebrow">05 · SNAPSHOT EXPORT</span><h3>Export JSON snapshot</h3><p>Download current measurements, node runtime, alerts, event log, and history.</p><button className="export" onClick={() => { const snapshot = { exportedAt: new Date().toISOString(), topology: selectedTopology, source: { probes: "live HTTP checks", nodeTelemetry: "simulated", clientRtt: "browser-to-SIGNAL server" }, network, runtime, alerts, eventLog, historySamples }; const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = "signal-snapshot.json"; link.click(); URL.revokeObjectURL(url); setDiagnostic("JSON snapshot exported") }}>⇩ Download snapshot</button></article>
+                  <article className="ops-card"><span className="eyebrow">06 · ENDPOINT BACKUP</span><h3>Export endpoint config</h3><p>Save custom endpoint names, URLs, and enabled state for backup or migration.</p><button className="export" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(customEndpoints.map(({id,name,url,enabled}) => ({id,name,url,enabled})), null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = "signal-endpoints.json"; link.click(); URL.revokeObjectURL(url); setDiagnostic("Endpoint configuration exported") }}>⇩ Export endpoints</button></article>
+                  <article className="ops-card"><span className="eyebrow">07 · ENDPOINT RESTORE</span><h3>Import endpoint config</h3><p>Choose a JSON file previously exported by SIGNAL. Existing endpoint IDs are replaced safely.</p><label className="ops-file">Choose JSON file<input type="file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const parsed = JSON.parse(await file.text()); if (!Array.isArray(parsed) || parsed.some((item) => typeof item.name !== "string" || typeof item.url !== "string" || !/^https?:\/\//i.test(item.url))) throw new Error("Expected an array of HTTP(S) endpoints"); const imported: CustomEndpoint[] = parsed.slice(0, 100).map((item) => ({ id: typeof item.id === "string" ? item.id : crypto.randomUUID(), name: item.name.slice(0, 80), url: item.url, enabled: item.enabled !== false, status: "pending", latency: null, checkedAt: null, error: null })); setCustomEndpoints((current) => [...imported, ...current.filter((item) => !imported.some((incoming) => incoming.id === item.id))].slice(0, 100)); setImportStatus(`Imported ${imported.length} endpoints`) } catch (error) { setImportStatus(error instanceof Error ? error.message : "Could not import JSON") } event.target.value = "" }} /></label><small>{importStatus || "Maximum 100 imported endpoints."}</small></article>
+                  <article className="ops-card"><span className="eyebrow">08 · BULK ENABLE</span><h3>Enable all endpoints</h3><p>Turn on monitoring for every saved endpoint.</p><button className="export" onClick={() => setCustomEndpoints((current) => current.map((item) => ({ ...item, enabled: true })))}>Enable monitoring</button></article>
+                  <article className="ops-card"><span className="eyebrow">09 · BULK PAUSE</span><h3>Pause all endpoints</h3><p>Stop browser-side endpoint checks without deleting the configuration.</p><button className="export" onClick={() => setCustomEndpoints((current) => current.map((item) => ({ ...item, enabled: false })))}>Pause monitoring</button></article>
+                  <article className="ops-card"><span className="eyebrow">10 · ALERT CLEANUP</span><h3>Clear alert feed</h3><p>Remove local alert records. This does not change network measurements.</p><button className="export danger" onClick={() => { setAlerts([]); setAcknowledgedAlerts([]); localStorage.removeItem("signal-alerts-v1"); setDiagnostic("Local alert feed cleared") }}>Clear all alerts</button></article>
+                </div>
+                <div className="page-heading ops-subheading"><div><span className="eyebrow">FILTERED INCIDENT FEED</span><h2>Recent alerts</h2><p>Mark individual alerts acknowledged; acknowledged state persists locally.</p></div><span className="page-count">{alerts.filter((item) => (incidentFilter === "all" || item.tone === incidentFilter) && (item.text + " " + item.time).toLowerCase().includes(incidentSearch.toLowerCase())).length} results</span></div>
+                <div className="incident-list">{alerts.filter((item) => (incidentFilter === "all" || item.tone === incidentFilter) && (item.text + " " + item.time).toLowerCase().includes(incidentSearch.toLowerCase())).map((item, index) => { const key = item.time + "|" + item.text; const acknowledged = acknowledgedAlerts.includes(key); return <article className={`incident-card ${item.tone}`} key={key + index}><i className={`legend-dot ${item.tone === "yellow" ? "warning" : item.tone}`} /><div><strong>{item.text}</strong><small>{item.time} · {acknowledged ? "ACKNOWLEDGED" : "UNACKNOWLEDGED"}</small></div><button className="export" onClick={() => setAcknowledgedAlerts((current) => acknowledged ? current.filter((entry) => entry !== key) : [...current, key])}>{acknowledged ? "Undo ACK" : "Acknowledge"}</button></article>})}{!alerts.length && <div className="empty-state">No alerts to display yet.</div>}</div>
               </>}
               {activePage === "Nodes" && <>
                 <div className="page-heading"><div><span className="eyebrow">TOPOLOGY INVENTORY</span><h1>Network nodes</h1><p>Node status and performance for {selectedTopology}.</p></div><span className="page-count">{nodes.length} nodes</span></div>
