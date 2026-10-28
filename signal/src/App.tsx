@@ -135,6 +135,9 @@ function App() {
   const [clientRtt, setClientRtt] = useState<number | null>(null)
   const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkInfo | null>(null)
   const [globalProbeData, setGlobalProbeData] = useState<GlobalProbeResponse | null>(null)
+  const globalMapElement = useRef<HTMLDivElement | null>(null)
+  const globalMapInstance = useRef<any>(null)
+  const globalMapMarkers = useRef<any>(null)
   const [worldLandPaths, setWorldLandPaths] = useState<string[]>([])
   const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
   const [globalCountryFilter, setGlobalCountryFilter] = useState("ALL")
@@ -202,6 +205,83 @@ function App() {
     window.addEventListener("keydown", handleShortcut)
     return () => window.removeEventListener("keydown", handleShortcut)
   }, [])
+
+  useEffect(() => {
+    if (selectedTopology !== "Global Internet" || !globalMapElement.current) return
+    let disposed = false
+    const loadLeaflet = async () => {
+      const leafletWindow = window as Window & { L?: any }
+      if (!document.querySelector('link[data-signal-leaflet="true"]')) {
+        const link = document.createElement("link")
+        link.rel = "stylesheet"
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        link.dataset.signalLeaflet = "true"
+        document.head.appendChild(link)
+      }
+      if (!leafletWindow.L) {
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.querySelector<HTMLScriptElement>('script[data-signal-leaflet="true"]')
+          if (existing) {
+            existing.addEventListener("load", () => resolve(), { once: true })
+            existing.addEventListener("error", () => reject(new Error("Leaflet failed to load")), { once: true })
+            if (leafletWindow.L) resolve()
+            return
+          }
+          const script = document.createElement("script")
+          script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          script.dataset.signalLeaflet = "true"
+          script.onload = () => resolve()
+          script.onerror = () => reject(new Error("Leaflet failed to load"))
+          document.body.appendChild(script)
+        })
+      }
+      if (disposed || !globalMapElement.current || !leafletWindow.L) return
+      const L = leafletWindow.L
+      if (!globalMapInstance.current) {
+        const map = L.map(globalMapElement.current, {
+          center: [20, 0],
+          zoom: 2,
+          minZoom: 2,
+          maxZoom: 8,
+          worldCopyJump: true,
+          zoomControl: true,
+          preferCanvas: true,
+        })
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>',
+          subdomains: "abcd",
+          maxZoom: 20,
+        }).addTo(map)
+        globalMapInstance.current = map
+        globalMapMarkers.current = L.layerGroup().addTo(map)
+        window.setTimeout(() => map.invalidateSize(), 100)
+      }
+      const map = globalMapInstance.current
+      const markerLayer = globalMapMarkers.current
+      markerLayer.clearLayers()
+      if (layers.nodes) {
+        for (const probe of globalVisibleProbes) {
+          const marker = L.circleMarker([probe.latitude, probe.longitude], {
+            radius: 4,
+            color: "#b7ffe7",
+            weight: 1,
+            fillColor: "#35e6a5",
+            fillOpacity: 0.95,
+          })
+          marker.bindPopup(
+            `<div class="signal-map-popup"><strong>RIPE Atlas probe #${probe.id}</strong><br>${probe.country}<br>${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}<br><small>Registry location only; no live latency reported.</small></div>`
+          )
+          marker.on("click", () => setSelectedGlobalProbe(probe))
+          markerLayer.addLayer(marker)
+        }
+      }
+      window.setTimeout(() => map.invalidateSize(), 80)
+    }
+    void loadLeaflet().catch(() => {
+      if (!disposed) setGlobalProbeError("Interactive map failed to load. Check the map library connection.")
+    })
+    return () => { disposed = true }
+  }, [selectedTopology, activePage, globalVisibleProbes, layers.nodes])
 
   useEffect(() => {
     let disposed = false
@@ -753,77 +833,7 @@ function App() {
                 })}
               </div>
 
-              {selectedTopology === "Global Internet" && <svg className="global-world-map" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
-                <g className="world-grid">
-                  <path d="M0 103H1000 M0 207H1000 M0 310H1000 M0 413H1000 M0 517H1000 M166 0V620 M333 0V620 M500 0V620 M666 0V620 M833 0V620" />
-                </g>
-                <g className="world-land">
-                  {worldLandPaths.map((path, index) => <path key={index} d={path} />)}
-                </g>
-              </svg>}
-              <svg
-                className="network-svg"
-                style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
-                viewBox="0 0 1000 620"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                <defs>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="2.8" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
-
-                {selectedTopology !== "Global Internet" && visibleConnections.map(([fromId, toId], index) => {
-                  const from = nodes.find((n) => n.id === fromId)!
-                  const to = nodes.find((n) => n.id === toId)!
-                  const x1 = from.x * 10
-                  const y1 = from.y * 6.2
-                  const x2 = to.x * 10
-                  const y2 = to.y * 6.2
-                  const dx = x2 - x1
-                  const dy = y2 - y1
-                  const bend = Math.min(65, Math.max(20, Math.abs(dx + dy) * 0.1))
-                  const cx = (x1 + x2) / 2 + (dy > 0 ? -bend : bend)
-                  const cy = (y1 + y2) / 2 - (dx > 0 ? bend * 0.35 : -bend * 0.35)
-                  const path = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`
-                  const warning = fromId === "database" || toId === "database" || index >= 8
-                  const purple = fromId === "cache" || toId === "backup"
-
-                  return (
-                    <g key={`${fromId}-${toId}`} className={warning ? "connection warning" : purple ? "connection purple" : "connection"}>
-                      {layers.traffic && <path d={path} className="connection-shadow" />}
-                      <path d={path} className="connection-line" />
-                      {layers.packets && (
-                        <>
-                          <circle r="4" className="packet packet-glow">
-                            <animateMotion
-                              dur={`${(1.8 + (index % 4) * 0.35) / speed}s`}
-                              repeatCount="indefinite"
-                              path={path}
-                              rotate="auto"
-                            />
-                          </circle>
-                          <circle r="2.1" className="packet">
-                            <animateMotion
-                              dur={`${(1.8 + (index % 4) * 0.35) / speed}s`}
-                              repeatCount="indefinite"
-                              path={path}
-                              rotate="auto"
-                            />
-                          </circle>
-                        </>
-                      )}
-                    </g>
-                  )
-                })}
-              </svg>
-
-              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{globalVisibleProbes.map((probe) => <button key={probe.id} type="button" className={`global-probe-dot ${selectedGlobalProbe?.id === probe.id ? "selected" : ""}`} style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} onClick={() => setSelectedGlobalProbe(probe)} aria-label={`Show RIPE Atlas probe ${probe.id} in ${probe.country}`} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /></button>)}</div>}
+              {selectedTopology === "Global Internet" && <div className="global-leaflet-map" ref={globalMapElement} aria-label="Interactive geographic map of RIPE Atlas probes" />}
               {selectedTopology === "Global Internet" && selectedGlobalProbe && <div className="global-probe-detail"><div><span className="eyebrow">RIPE ATLAS PROBE</span><button type="button" onClick={() => setSelectedGlobalProbe(null)} aria-label="Close probe details">×</button></div><strong>Probe #{selectedGlobalProbe.id}</strong><dl><dt>Country</dt><dd>{selectedGlobalProbe.country}</dd><dt>ASN</dt><dd>{selectedGlobalProbe.asn ? `AS${selectedGlobalProbe.asn}` : "Not reported"}</dd><dt>Latitude</dt><dd>{selectedGlobalProbe.latitude.toFixed(4)}°</dd><dt>Longitude</dt><dd>{selectedGlobalProbe.longitude.toFixed(4)}°</dd><dt>Registry status</dt><dd>{selectedGlobalProbe.status}</dd></dl><small>Registry metadata only. This view has no latency measurement for this probe.</small></div>}
               {selectedTopology !== "Global Internet" && layers.nodes && (
                 <div className="node-layer" style={{ transform: `scale(${zoom})` }}>
