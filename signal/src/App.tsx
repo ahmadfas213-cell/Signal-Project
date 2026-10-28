@@ -125,7 +125,6 @@ function App() {
   })
   const [now, setNow] = useState(new Date())
   const [trafficHistory, setTrafficHistory] = useState<number[]>([1284])
-  const [latencyHistory, setLatencyHistory] = useState<number[]>([42])
   const [eventLog, setEventLog] = useState<Array<{ time: string; tone: string; text: string }>>([])
   const [alerts, setAlerts] = useState<Array<{ tone: string; text: string; time: string }>>([])
 
