@@ -1750,3 +1750,21 @@ button {
   color: var(--text-muted, #8c9ba4);
   line-height: 1.6;
 }
+
+
+.signal-animated-route {
+  stroke-dasharray: 5 13;
+  animation: signal-route-flow 1.15s linear infinite;
+  filter: drop-shadow(0 0 3px rgba(56, 232, 178, 0.65));
+}
+
+@keyframes signal-route-flow {
+  from { stroke-dashoffset: 36; }
+  to { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-animated-route {
+    animation: none;
+  }
+}
