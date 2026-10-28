@@ -358,10 +358,11 @@ button {
 .layers {
   position: absolute;
   z-index: 10;
-  top: 16px;
+  top: 50%;
   left: 15px;
   width: 149px;
   padding: 13px;
+  transform: translateY(-50%);
   border: 1px solid rgba(155, 180, 205, 0.12);
   border-radius: 7px;
   background: rgba(9, 17, 26, 0.88);
