@@ -1891,6 +1891,27 @@ button.table-row:hover {
   font-size: 10px;
 }
 
+.global-country-filter {
+  max-width: 190px;
+  min-width: 118px;
+  padding: 7px 28px 7px 9px;
+  border: 1px solid rgba(73, 179, 194, 0.28);
+  border-radius: 6px;
+  outline: none;
+  color: #cce7eb;
+  background: #0b1720;
+  font-size: 10px;
+}
+
+.global-country-filter:focus {
+  border-color: rgba(73, 179, 194, 0.75);
+}
+
+.global-country-filter option {
+  color: #d9e8ed;
+  background: #0b1720;
+}
+
 .global-map-status small {
   flex-basis: 100%;
   color: #71828a;
