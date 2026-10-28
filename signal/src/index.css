@@ -1755,3 +1755,18 @@ button.table-row:hover {
     text-align: left;
   }
 }
+
+.view-all {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cyan);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.view-all:hover {
+  color: #fff;
+  text-decoration: underline;
+}
