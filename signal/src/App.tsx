@@ -177,7 +177,7 @@ function App() {
               ...changes.map((item) => ({
                 time: timestamp,
                 tone: item.status === "critical" ? "red" : item.status === "warning" ? "yellow" : "green",
-                text: `${item.name} status changed to ${item.status.toUpperCase()}`,
+                text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id} status changed to ${item.status.toUpperCase()}`,
               })),
               ...current,
             ].slice(0, 8))
@@ -191,7 +191,7 @@ function App() {
             setAlerts((current) => [
               ...incidents.map((item) => ({
                 tone: item.status === "critical" ? "red" : "yellow",
-                text: `${item.name}: ${item.latency}ms latency / ${item.packetLoss.toFixed(2)}% loss`,
+                text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id}: ${item.latency}ms latency / ${item.packetLoss.toFixed(2)}% loss`,
                 time: timestamp,
               })),
               ...current,
@@ -230,19 +230,7 @@ function App() {
   const formatTraffic = (value: number) =>
     value >= 1000 ? `${(value / 1000).toFixed(2)}k/s` : `${value}/s`
 
-  const globalState =
-    network.packetLoss > 1 || network.latency > 90
-      ? "DEGRADED"
-      : network.packetLoss > 0.5
-        ? "WARNING"
-        : "HEALTHY"
-
   const visibleConnections = layers.connections ? connections : []
-
-  const selectedLinks = useMemo(
-    () => connections.filter(([a, b]) => a === selectedId || b === selectedId),
-    [selectedId],
-  )
 
   const chartPoints = useMemo(() => {
     const values = trafficHistory.length ? trafficHistory : [network.traffic]
@@ -252,15 +240,6 @@ function App() {
       Math.max(12, Math.min(88, 18 + ((value - min) / (max - min)) * 68)),
     )
   }, [trafficHistory, network.traffic])
-
-  const latencyPoints = useMemo(() => {
-    const values = latencyHistory.length ? latencyHistory : [network.latency]
-    const min = Math.min(...values)
-    const max = Math.max(...values, min + 1)
-    return values.map((value) =>
-      Math.max(12, Math.min(88, 18 + ((value - min) / (max - min)) * 68)),
-    )
-  }, [latencyHistory, network.latency])
 
   const time = now.toLocaleTimeString("en-GB")
 
