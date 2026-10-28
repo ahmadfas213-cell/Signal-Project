@@ -223,6 +223,11 @@ function App() {
       }
       if (disposed || !globalMapElement.current || !leafletWindow.L) return
       const L = leafletWindow.L
+      if (globalMapInstance.current && globalMapInstance.current.getContainer() !== globalMapElement.current) {
+        globalMapInstance.current.remove()
+        globalMapInstance.current = null
+        globalMapMarkers.current = null
+      }
       if (!globalMapInstance.current) {
         const map = L.map(globalMapElement.current, {
           center: [20, 0],
