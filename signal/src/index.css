@@ -1857,3 +1857,115 @@ button.table-row:hover {
     grid-template-columns: 1fr;
   }
 }
+
+
+.global-network-card .layers {
+  z-index: 5;
+}
+
+.global-map-status {
+  position: absolute;
+  z-index: 4;
+  top: 62px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(8, 16, 22, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+.global-map-status strong {
+  color: var(--cyan);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.global-map-status > span:not(.status-dot) {
+  color: var(--text-secondary, #9aaab2);
+  font-size: 10px;
+}
+
+.global-map-status small {
+  flex-basis: 100%;
+  color: #71828a;
+  font-size: 9px;
+  padding-left: 16px;
+}
+
+.global-probe-layer {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  transform-origin: center;
+  transition: transform 0.25s ease;
+  pointer-events: none;
+}
+
+.global-probe-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(83, 246, 187, 0.88);
+  box-shadow: 0 0 8px rgba(83, 246, 187, 0.8), 0 0 18px rgba(83, 246, 187, 0.24);
+}
+
+.global-probe-dot i {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(83, 246, 187, 0.38);
+  border-radius: 50%;
+}
+
+.global-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.global-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.global-stat span {
+  color: #829199;
+  font-size: 10px;
+}
+
+.global-stat strong {
+  color: var(--cyan);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.global-updated {
+  color: #728087;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.global-network-card .network-svg {
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .global-map-status {
+    top: 92px;
+    left: 10px;
+    right: 10px;
+  }
+}
