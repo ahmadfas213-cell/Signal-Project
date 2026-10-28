@@ -32,11 +32,14 @@ type Runtime = {
 
 type NetworkData = {
   timestamp: string
-  latency: number
+  latency: number | null
   traffic: number
-  packetLoss: number
+  packetLoss: number | null
   nodes: number
   connections: number
+  probes?: Array<{ id: string; name: string; url: string; latency: number | null; status: string; checkedAt: string | null; error: string | null; httpStatus?: number | null }>
+  source?: string
+  topologySource?: string
   nodeData?: Array<{
     id: string
     latency: number
@@ -118,6 +121,7 @@ function App() {
   const [diagnostic, setDiagnostic] = useState("No diagnostic running")
   const [tab, setTab] = useState<"Overview" | "Metrics" | "Logs" | "Alerts">("Overview")
   const [serverOnline, setServerOnline] = useState(false)
+  const [clientRtt, setClientRtt] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -152,6 +156,7 @@ function App() {
 
     let socket: WebSocket | null = null
     let reconnectTimer = 0
+    let pingTimer = 0
     let disposed = false
 
     const connect = () => {
@@ -161,16 +166,23 @@ function App() {
 
       socket.onopen = () => {
         setServerOnline(true)
+        pingTimer = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "client:ping", sentAt: performance.now() }))
+        }, 2000)
       }
 
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
 
+          if (message.type === "client:pong") {
+            setClientRtt(Math.max(0, Math.round(performance.now() - message.sentAt)))
+            return
+          }
           if (message.type !== "network:update" || paused) return
 
           const data: NetworkData = message.data
-          setNetwork(data)
+          setNetwork((current) => ({ ...data, latency: data.latency ?? current.latency, packetLoss: data.packetLoss ?? current.packetLoss }))
 
           if (data.nodeData?.length) {
             const next: Record<string, Runtime> = { ...initialRuntime }
@@ -232,6 +244,8 @@ function App() {
       }
 
       socket.onclose = () => {
+        window.clearInterval(pingTimer)
+        setClientRtt(null)
         setServerOnline(false)
         if (!disposed) reconnectTimer = window.setTimeout(connect, 3000)
       }
@@ -242,6 +256,7 @@ function App() {
     return () => {
       disposed = true
       window.clearTimeout(reconnectTimer)
+      window.clearInterval(pingTimer)
       socket?.close()
     }
   }, [paused])
@@ -283,7 +298,7 @@ function App() {
   const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
     const timestamp = new Date().toLocaleTimeString("en-GB")
     const result = tool === "Ping"
-      ? `Demo ping to ${selectedNode.name}: ${selected.latency}ms, simulated loss 0%`
+      ? `Live client-to-server RTT: ${clientRtt === null ? "measuring…" : `${clientRtt}ms`}; external endpoint latency: ${network.latency ?? "measuring…"}ms`
       : tool === "Traceroute"
         ? `Demo route: Client → Router → ${selectedNode.name}`
         : tool === "Packet Monitor"
@@ -298,7 +313,8 @@ function App() {
     const rows = [
       ["Generated at", new Date().toISOString()],
       ["Topology", selectedTopology],
-      ["Average latency (ms)", String(network.latency)],
+      ["Average external endpoint latency (ms)", String(network.latency ?? "unavailable")],
+      ["Browser-to-SIGNAL RTT (ms)", String(clientRtt ?? "unavailable")],
       ["Traffic per second", String(network.traffic)],
       ["Packet loss (%)", String(network.packetLoss)],
       ["Nodes", String(network.nodes)],
@@ -395,6 +411,11 @@ function App() {
             <span>Avg Latency</span>
             <strong className="green">{network.latency}ms</strong>
             <em className="green">●</em>
+          </p>
+          <p>
+            <span>Client RTT</span>
+            <strong className={clientRtt !== null && clientRtt < 100 ? "green" : "yellow"}>{clientRtt === null ? "—" : `${clientRtt}ms`}</strong>
+            <em className="cyan">●</em>
           </p>
         </div>
 
@@ -765,7 +786,7 @@ function App() {
               </>}
             </section>
           )}
-          {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">The backend currently generates simulated telemetry. A public WebSocket endpoint is required for live data on the deployed site.</p></section></div>}
+          {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">External endpoint latency and probe loss are measured live by HTTP requests from the backend. Client RTT is measured from this browser to the SIGNAL server. Traffic and per-node topology telemetry remain simulated. Browsers cannot expose Wi-Fi/cellular signal strength in dBm, so this dashboard does not invent a signal-strength reading.</p></section></div>}
         </div>
       </section>
     </main>
