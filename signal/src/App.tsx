@@ -111,7 +111,7 @@ function App() {
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
   const [tab, setTab] = useState<"Overview" | "Metrics" | "Logs" | "Alerts">("Overview")
-  const [serverOnline, setServerOnline] = useState(true)
+  const [serverOnline, setServerOnline] = useState(false)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -136,90 +136,108 @@ function App() {
   const previousRuntime = useRef<Record<string, Runtime>>(initialRuntime)
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:3000")
+    const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
+    const socketUrl = configuredUrl || (import.meta.env.DEV ? "ws://localhost:3000" : "")
 
-    socket.onopen = () => {
-      setServerOnline(true)
+    if (!socketUrl) {
+      setServerOnline(false)
+      return
     }
 
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data)
+    let socket: WebSocket | null = null
+    let reconnectTimer = 0
+    let disposed = false
 
-        if (message.type !== "network:update") return
+    const connect = () => {
+      if (disposed) return
 
-        const data: NetworkData = message.data
-        if (paused) return
-        setNetwork(data)
+      socket = new WebSocket(socketUrl)
 
-        if (data.nodeData?.length) {
-          const next: Record<string, Runtime> = { ...initialRuntime }
+      socket.onopen = () => {
+        setServerOnline(true)
+      }
 
-          data.nodeData.forEach((item) => {
-            next[item.id] = {
-              latency: item.latency,
-              packetLoss: item.packetLoss,
-              uptime: item.uptime,
-              status: item.status,
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+
+          if (message.type !== "network:update" || paused) return
+
+          const data: NetworkData = message.data
+          setNetwork(data)
+
+          if (data.nodeData?.length) {
+            const next: Record<string, Runtime> = { ...initialRuntime }
+
+            data.nodeData.forEach((item) => {
+              next[item.id] = {
+                latency: item.latency,
+                packetLoss: item.packetLoss,
+                uptime: item.uptime,
+                status: item.status,
+              }
+            })
+
+            setRuntime(next)
+
+            const timestamp = new Date(data.timestamp).toLocaleTimeString("en-GB")
+            const changes = data.nodeData.filter(
+              (item) => previousRuntime.current[item.id]?.status !== item.status,
+            )
+
+            if (changes.length) {
+              setEventLog((current) => [
+                ...changes.map((item) => ({
+                  time: timestamp,
+                  tone: item.status === "critical" ? "red" : item.status === "warning" ? "yellow" : "green",
+                  text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id} status changed to ${item.status.toUpperCase()}`,
+                })),
+                ...current,
+              ].slice(0, 40))
             }
-          })
 
-          setRuntime(next)
+            const incidents = data.nodeData.filter((item) => item.status !== "online")
+            const newlyAffected = incidents.filter(
+              (item) => previousRuntime.current[item.id]?.status !== item.status,
+            )
 
-          const timestamp = new Date(data.timestamp).toLocaleTimeString("en-GB")
-          const changes = data.nodeData.filter(
-            (item) => previousRuntime.current[item.id]?.status !== item.status,
-          )
+            if (newlyAffected.length) {
+              setAlerts((current) => [
+                ...newlyAffected.map((item) => ({
+                  tone: item.status === "critical" ? "red" : "yellow",
+                  text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id}: ${item.latency}ms latency / ${item.packetLoss.toFixed(2)}% loss`,
+                  time: timestamp,
+                })),
+                ...current,
+              ].slice(0, 40))
+            }
 
-          if (changes.length) {
-            setEventLog((current) => [
-              ...changes.map((item) => ({
-                time: timestamp,
-                tone: item.status === "critical" ? "red" : item.status === "warning" ? "yellow" : "green",
-                text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id} status changed to ${item.status.toUpperCase()}`,
-              })),
-              ...current,
-            ].slice(0, 8))
+            previousRuntime.current = next
           }
 
-          const incidents = data.nodeData.filter(
-            (item) => item.status !== "online",
-          )
-
-          if (incidents.length) {
-            setAlerts((current) => [
-              ...incidents.map((item) => ({
-                tone: item.status === "critical" ? "red" : "yellow",
-                text: `${nodes.find((node) => node.id === item.id)?.name ?? item.id}: ${item.latency}ms latency / ${item.packetLoss.toFixed(2)}% loss`,
-                time: timestamp,
-              })),
-              ...current,
-            ].slice(0, 6))
-          }
-
-          previousRuntime.current = next
+          setTrafficHistory((current) => [...current, data.traffic].slice(-30))
+        } catch (error) {
+          console.error("SIGNAL WebSocket:", error)
         }
+      }
 
-        setTrafficHistory((current) => [...current, data.traffic].slice(-30))
-      } catch (error) {
-        console.error("SIGNAL WebSocket:", error)
+      socket.onerror = () => {
+        setServerOnline(false)
+      }
+
+      socket.onclose = () => {
+        setServerOnline(false)
+        if (!disposed) reconnectTimer = window.setTimeout(connect, 3000)
       }
     }
 
-    socket.onerror = () => {
-      setServerOnline(false)
+    connect()
+
+    return () => {
+      disposed = true
+      window.clearTimeout(reconnectTimer)
+      socket?.close()
     }
-
-    socket.onclose = () => {
-      setServerOnline(false)
-    }
-
-    return () => socket.close()
-  }, [paused])
-
-  useEffect(() => {
-    if (!paused) return
-    return undefined
   }, [paused])
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? nodes[3]
