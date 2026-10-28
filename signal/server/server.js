@@ -1,6 +1,7 @@
 import http from "http"
+import { WebSocketServer, WebSocket } from "ws"
 
-const PORT = 3000
+const PORT = Number(process.env.PORT || 3000)
 
 const nodes = [
   { id: "client", name: "Client", type: "client", baseLatency: 24, baseLoss: 0.08 },
@@ -38,68 +39,30 @@ function nextValue(current, target, amount) {
 
 function updateNode(node) {
   const current = state.get(node.id)
-
   const latencyTarget =
     node.baseLatency +
     Math.sin(Date.now() / 4200 + node.baseLatency) * 8 +
     (Math.random() - 0.5) * 18
+  const lossTarget = Math.max(0, node.baseLoss + (Math.random() - 0.5) * 0.35)
 
-  const lossTarget = Math.max(
-    0,
-    node.baseLoss + (Math.random() - 0.5) * 0.35,
-  )
+  current.latency = Math.round(clamp(nextValue(current.latency, latencyTarget, 0.34), 5, 180))
+  current.packetLoss = Number(clamp(nextValue(current.packetLoss, lossTarget, 0.30), 0, 5).toFixed(2))
 
-  current.latency = Math.round(
-    clamp(
-      nextValue(current.latency, latencyTarget, 0.34),
-      5,
-      180,
-    ),
-  )
-
-  current.packetLoss = Number(
-    clamp(
-      nextValue(current.packetLoss, lossTarget, 0.30),
-      0,
-      5,
-    ).toFixed(2),
-  )
-
-  if (Math.random() < 0.018) {
-    current.latency += Math.floor(25 + Math.random() * 45)
-  }
+  if (Math.random() < 0.018) current.latency += Math.floor(25 + Math.random() * 45)
 
   if (Math.random() < 0.01) {
-    current.packetLoss = Number(
-      clamp(
-        current.packetLoss + 0.7 + Math.random() * 0.9,
-        0,
-        5,
-      ).toFixed(2),
-    )
+    current.packetLoss = Number(clamp(current.packetLoss + 0.7 + Math.random() * 0.9, 0, 5).toFixed(2))
   }
 
-  if (
-    current.latency >= 100 ||
-    current.packetLoss >= 1.5
-  ) {
+  if (current.latency >= 100 || current.packetLoss >= 1.5) {
     current.status = "critical"
-  } else if (
-    current.latency >= 75 ||
-    current.packetLoss >= 0.8
-  ) {
+  } else if (current.latency >= 75 || current.packetLoss >= 0.8) {
     current.status = "warning"
   } else {
     current.status = "online"
   }
 
-  current.uptime = Number(
-    clamp(
-      current.uptime + (Math.random() - 0.5) * 0.015,
-      97.8,
-      99.99,
-    ).toFixed(2),
-  )
+  current.uptime = Number(clamp(current.uptime + (Math.random() - 0.5) * 0.015, 97.8, 99.99).toFixed(2))
 
   return {
     ...node,
@@ -112,35 +75,11 @@ function updateNode(node) {
 
 function networkData() {
   const nodeData = nodes.map(updateNode)
+  const avgLatency = Math.round(nodeData.reduce((sum, node) => sum + node.latency, 0) / nodeData.length)
+  const avgPacketLoss = Number((nodeData.reduce((sum, node) => sum + node.packetLoss, 0) / nodeData.length).toFixed(2))
+  const trafficTarget = 1350 + Math.sin(Date.now() / 5500) * 420 + (Math.random() - 0.5) * 220
 
-  const avgLatency = Math.round(
-    nodeData.reduce(
-      (sum, node) => sum + node.latency,
-      0,
-    ) / nodeData.length,
-  )
-
-  const avgPacketLoss = Number(
-    (
-      nodeData.reduce(
-        (sum, node) => sum + node.packetLoss,
-        0,
-      ) / nodeData.length
-    ).toFixed(2),
-  )
-
-  const trafficTarget =
-    1350 +
-    Math.sin(Date.now() / 5500) * 420 +
-    (Math.random() - 0.5) * 220
-
-  traffic = Math.round(
-    clamp(
-      nextValue(traffic, trafficTarget, 0.24),
-      500,
-      2400,
-    ),
-  )
+  traffic = Math.round(clamp(nextValue(traffic, trafficTarget, 0.24), 500, 2400))
 
   return {
     timestamp: new Date().toISOString(),
@@ -154,33 +93,27 @@ function networkData() {
 }
 
 const server = http.createServer((req, res) => {
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "*",
-  )
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
+  res.setHeader("Content-Type", "application/json; charset=utf-8")
 
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type",
-  )
+  if (req.method === "OPTIONS") {
+    res.writeHead(204)
+    res.end()
+    return
+  }
 
-  res.setHeader(
-    "Content-Type",
-    "application/json",
-  )
-
-  if (req.url === "/api/health") {
+  if (req.url === "/" || req.url === "/api/health") {
     res.writeHead(200)
-
-    res.end(
-      JSON.stringify({
-        status: "healthy",
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        server: "SIGNAL",
-      }),
-    )
-
+    res.end(JSON.stringify({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      server: "SIGNAL",
+      websocket: "enabled",
+      mode: "simulated-telemetry",
+    }))
     return
   }
 
@@ -191,16 +124,33 @@ const server = http.createServer((req, res) => {
   }
 
   res.writeHead(404)
-
-  res.end(
-    JSON.stringify({
-      error: "Endpoint not found",
-    }),
-  )
+  res.end(JSON.stringify({ error: "Endpoint not found" }))
 })
 
-server.listen(PORT, () => {
-  console.log(
-    `SIGNAL server running at http://localhost:${PORT}`,
-  )
+const websocketServer = new WebSocketServer({ server })
+
+websocketServer.on("connection", (socket) => {
+  socket.send(JSON.stringify({ type: "network:update", data: networkData() }))
 })
+
+const broadcast = () => {
+  const message = JSON.stringify({ type: "network:update", data: networkData() })
+  for (const socket of websocketServer.clients) {
+    if (socket.readyState === WebSocket.OPEN) socket.send(message)
+  }
+}
+
+const telemetryTimer = setInterval(broadcast, 1000)
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`SIGNAL server listening on port ${PORT}`)
+})
+
+function shutdown() {
+  clearInterval(telemetryTimer)
+  websocketServer.close()
+  server.close(() => process.exit(0))
+}
+
+process.on("SIGINT", shutdown)
+process.on("SIGTERM", shutdown)
