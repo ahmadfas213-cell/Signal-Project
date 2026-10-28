@@ -95,11 +95,13 @@ Free hosting may sleep when idle, so the first request after inactivity can take
 ## Roadmap
 
 - [ ] Deploy and verify the hosted backend end to end.
-- [ ] Improve global probe coverage and show exact sample freshness and partial-fetch warnings.
+- [x] Expand global probe coverage across multiple registry pages and surface partial-fetch warnings.
+- [ ] Improve country coverage balance and show per-country sample freshness.
 - [ ] Add genuine RIPE Atlas latency measurements and traceroute data where public results and permissions allow.
 - [ ] Add historical persistence instead of session-only charts.
 - [ ] Add alert thresholds, incident acknowledgement, and configurable probe targets.
-- [ ] Add map interaction, probe detail views, and richer country/ASN filtering.
+- [x] Add country filtering to the global probe map.
+- [ ] Add clickable probe detail views and ASN filtering.
 - [ ] Add automated tests for API responses, telemetry calculations, and UI states.
 - [ ] Review dependency audit findings and establish a regular security update process.
 
