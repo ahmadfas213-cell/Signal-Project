@@ -476,9 +476,10 @@ function App() {
           const data: NetworkData = message.data
           setNetwork((current) => ({ ...data, latency: data.latency ?? current.latency, packetLoss: data.packetLoss ?? current.packetLoss }))
 
-          if (data.probes?.length) {
+          const probes = data.probes
+          if (probes?.length) {
             const timestamp = new Date(data.timestamp).toLocaleTimeString("en-GB")
-            const probeEvents = data.probes.flatMap((probe) => {
+            const probeEvents = probes.flatMap((probe) => {
               const previous = previousProbeStatuses.current[probe.id]
               if (previous === undefined || previous === probe.status) return []
               const tone = probe.status === "online" ? "green" : probe.status === "warning" ? "yellow" : "red"
@@ -489,17 +490,17 @@ function App() {
               }]
             })
             if (probeEvents.length) setEventLog((current) => [...probeEvents, ...current].slice(0, 40))
-            previousProbeStatuses.current = Object.fromEntries(data.probes.map((probe) => [probe.id, probe.status]))
+            previousProbeStatuses.current = Object.fromEntries(probes.map((probe) => [probe.id, probe.status]))
 
             const nowMs = Date.now()
             if (nowMs - lastProbeSummaryAt.current >= 30000) {
-              const online = data.probes.filter((probe) => probe.status === "online").length
-              const checked = data.probes.filter((probe) => probe.status !== "pending").length
+              const online = probes.filter((probe) => probe.status === "online").length
+              const checked = probes.filter((probe) => probe.status !== "pending").length
               const tone = checked > 0 && online === checked ? "green" : online === 0 ? "red" : "yellow"
               setEventLog((current) => [{
                 time: timestamp,
                 tone,
-                text: `HTTP probe sweep: ${online}/${checked || data.probes.length} targets responding`,
+                text: `HTTP probe sweep: ${online}/${checked || probes.length} targets responding`,
               }, ...current].slice(0, 40))
               lastProbeSummaryAt.current = nowMs
             }
