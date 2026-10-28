@@ -119,11 +119,13 @@ function App() {
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
-  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints">("Overview")
+  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints" | "Compare" | "SLA Lab">("Overview")
   const [selectedTopology, setSelectedTopology] = useState("Production")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState("")
+  const [slaTarget, setSlaTarget] = useState(99.9)
+  const [slaPeriod, setSlaPeriod] = useState(30)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [diagnostic, setDiagnostic] = useState("No diagnostic running")
@@ -517,7 +519,7 @@ function App() {
 
 
   const commandItems = [
-    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints"] as const).map((page) => ({
+    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints", "Compare", "SLA Lab"] as const).map((page) => ({
       label: `Open ${page}`,
       detail: "Navigate",
       keywords: page.toLowerCase(),
@@ -552,6 +554,8 @@ function App() {
             ["□", "History"],
             ["▤", "Reports"],
             ["⌁", "Endpoints"],
+            ["⇄", "Compare"],
+            ["◷", "SLA Lab"],
           ].map(([ico, label]) => (
             <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
@@ -1039,6 +1043,52 @@ function App() {
                 </article>)}
                 {!customEndpoints.length && <div className="empty-state">No custom endpoints yet. Add an HTTP or HTTPS health URL above to start monitoring.</div>}</div>
                 <div className="diagnostic-card"><strong>Current diagnostic</strong><p>{diagnostic}</p></div>
+              </>}
+
+              {activePage === "Compare" && <>
+                <div className="page-heading"><div><span className="eyebrow">LIVE ENDPOINT BENCHMARK</span><h1>Endpoint comparison</h1><p>Compare the latest response times for endpoints monitored in this browser. Values update when the endpoint monitor performs its next check.</p></div><span className="page-count">{customEndpoints.length} endpoints</span></div>
+                <div className="compare-summary">
+                  <article><span>Fastest response</span><strong>{customEndpoints.filter((item) => item.status === "online" && item.latency !== null).length ? Math.min(...customEndpoints.filter((item) => item.status === "online" && item.latency !== null).map((item) => item.latency as number)) + " ms" : "—"}</strong><small>{customEndpoints.filter((item) => item.status === "online" && item.latency !== null).sort((a, b) => (a.latency ?? Infinity) - (b.latency ?? Infinity))[0]?.name ?? "No live samples yet"}</small></article>
+                  <article><span>Responding</span><strong>{customEndpoints.filter((item) => item.status === "online").length} / {customEndpoints.length}</strong><small>Browser-reachable endpoints</small></article>
+                  <article><span>Blocked by CORS</span><strong>{customEndpoints.filter((item) => item.status === "blocked").length}</strong><small>Reachability cannot be confirmed</small></article>
+                </div>
+                <div className="compare-list">
+                  {customEndpoints.length ? [...customEndpoints].sort((a, b) => {
+                    const rank = (status: CustomEndpoint["status"]) => status === "online" ? 0 : status === "pending" ? 1 : status === "blocked" ? 2 : 3
+                    return rank(a.status) - rank(b.status) || (a.latency ?? Infinity) - (b.latency ?? Infinity)
+                  }).map((endpoint, index, sorted) => {
+                    const maxLatency = Math.max(1, ...sorted.map((item) => item.latency ?? 0))
+                    const width = endpoint.latency === null ? 0 : Math.max(3, Math.min(100, endpoint.latency / maxLatency * 100))
+                    return <article className="compare-row" key={endpoint.id}>
+                      <div className="compare-rank">{endpoint.status === "online" && endpoint.latency !== null ? String(index + 1).padStart(2, "0") : "—"}</div>
+                      <div className="compare-main"><div className="compare-title"><strong>{endpoint.name}</strong><span className={`endpoint-status ${endpoint.status}`}>{endpoint.status.toUpperCase()}</span></div><small>{endpoint.url}</small><div className="compare-track"><span style={{ width: `${width}%` }} /></div></div>
+                      <div className="compare-latency"><strong>{endpoint.latency === null ? "—" : `${endpoint.latency} ms`}</strong><small>{endpoint.checkedAt ? new Date(endpoint.checkedAt).toLocaleTimeString("en-GB") : "Not checked"}</small></div>
+                    </article>
+                  }) : <div className="empty-state">Add endpoints on the Endpoints page to compare their response times.</div>}
+                </div>
+                <p className="endpoint-note">This ranks only the latest browser-side fetch timings, not a long-term benchmark. Browser location, network conditions, caching, and CORS affect results. A blocked request is not proof that a server is offline.</p>
+                <div className="page-actions"><button className="export" onClick={() => {
+                  const rows = [["Endpoint", "URL", "Status", "Latency (ms)", "Last checked", "Error"], ...[...customEndpoints].sort((a, b) => (a.latency ?? Infinity) - (b.latency ?? Infinity)).map((item) => [item.name, item.url, item.status, String(item.latency ?? ""), item.checkedAt ?? "", item.error ?? ""])]
+                  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\\r\\n")
+                  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }))
+                  const link = document.createElement("a"); link.href = url; link.download = "signal-endpoint-comparison.csv"; link.click(); URL.revokeObjectURL(url)
+                }}>⇩ Export comparison CSV</button><button className="export" onClick={() => setActivePage("Endpoints")}>Manage endpoints</button></div>
+              </>}
+              {activePage === "SLA Lab" && <>
+                <div className="page-heading"><div><span className="eyebrow">RELIABILITY PLANNING</span><h1>SLA budget calculator</h1><p>Calculate the maximum downtime allowed by a target availability agreement. This is a planning calculator, not a claim about observed uptime.</p></div></div>
+                <div className="sla-controls">
+                  <label><span>Availability target</span><select value={slaTarget} onChange={(event) => setSlaTarget(Number(event.target.value))}><option value={99}>99%</option><option value={99.5}>99.5%</option><option value={99.9}>99.9%</option><option value={99.95}>99.95%</option><option value={99.99}>99.99%</option><option value={99.999}>99.999%</option></select></label>
+                  <label><span>Measurement period</span><select value={slaPeriod} onChange={(event) => setSlaPeriod(Number(event.target.value))}><option value={1}>1 day</option><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option><option value={365}>365 days</option></select></label>
+                </div>
+                <div className="sla-hero"><span>Permitted downtime</span><strong>{(() => { const minutes = slaPeriod * 24 * 60 * (1 - slaTarget / 100); if (minutes < 1) return `${Math.round(minutes * 60)} seconds`; if (minutes < 60) return `${minutes.toFixed(1)} minutes`; if (minutes < 1440) return `${(minutes / 60).toFixed(2)} hours`; return `${(minutes / 1440).toFixed(2)} days` })()}</strong><small>At {slaTarget}% availability across {slaPeriod} {slaPeriod === 1 ? "day" : "days"}</small></div>
+                <div className="sla-grid">
+                  {[99, 99.5, 99.9, 99.95, 99.99, 99.999].map((target) => {
+                    const minutes = slaPeriod * 1440 * (1 - target / 100)
+                    const formatted = minutes < 1 ? `${Math.round(minutes * 60)} sec` : minutes < 60 ? `${minutes.toFixed(1)} min` : minutes < 1440 ? `${(minutes / 60).toFixed(2)} hr` : `${(minutes / 1440).toFixed(2)} days`
+                    return <button className={slaTarget === target ? "sla-option selected" : "sla-option"} key={target} onClick={() => setSlaTarget(target)}><span>{target}%</span><strong>{formatted}</strong><small>downtime budget</small></button>
+                  })}
+                </div>
+                <div className="diagnostic-card"><strong>How this is calculated</strong><p>Allowed downtime = period duration × (1 − availability target). For example, 99.9% over 30 days permits 43.2 minutes of downtime. Actual SLA measurement depends on the contract's definition of downtime, exclusions, and monitoring method.</p></div>
               </>}
               {activePage === "Nodes" && <>
                 <div className="page-heading"><div><span className="eyebrow">TOPOLOGY INVENTORY</span><h1>Network nodes</h1><p>Node status and performance for {selectedTopology}.</p></div><span className="page-count">{nodes.length} nodes</span></div>
