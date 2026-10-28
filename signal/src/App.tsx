@@ -506,7 +506,7 @@ function App() {
           <>
           <div className="main-row">
             <section className={`network-card ${layers.geographical ? "geographical" : ""} ${selectedTopology === "Global Internet" ? "global-network-card" : ""}`}>
-              {selectedTopology === "Global Internet" && <div className="global-map-status"><span className={`status-dot ${globalProbeData ? "" : "offline"}`} /><strong>GLOBAL INTERNET PROBES</strong><span>{globalProbeData ? `${globalProbeData.returned.toLocaleString()} mapped probes` : globalProbeError || "Loading global probe registry…"}</span><small>Source: RIPE Atlas public probe registry · sampled active public probes · no invented links</small></div>}
+              {selectedTopology === "Global Internet" && <div className="global-map-status"><span className={`status-dot ${globalProbeData ? "" : "offline"}`} /><strong>GLOBAL INTERNET PROBES</strong><span>{globalProbeData ? `${globalVisibleProbes.length.toLocaleString()} mapped probes` : globalProbeError || "Loading global probe registry…"}</span><select className="global-country-filter" value={globalCountryFilter} onChange={(event) => setGlobalCountryFilter(event.target.value)} aria-label="Filter probes by country"><option value="ALL">All countries</option>{globalCountries.map((country) => <option key={country} value={country}>{country}</option>)}</select><small>Source: RIPE Atlas public probe registry · sampled active public probes · no invented links</small></div>}
               <div className="layers">
                 <span>LAYERS</span>
 
