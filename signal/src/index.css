@@ -1898,6 +1898,32 @@ button.table-row:hover {
   padding-left: 16px;
 }
 
+.global-world-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.world-grid path {
+  fill: none;
+  stroke: rgba(79, 150, 174, 0.09);
+  stroke-width: 1;
+  stroke-dasharray: 3 8;
+  vector-effect: non-scaling-stroke;
+}
+
+.world-land path {
+  fill: rgba(27, 110, 132, 0.14);
+  stroke: rgba(73, 179, 194, 0.34);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .global-probe-layer {
   position: absolute;
   z-index: 3;
