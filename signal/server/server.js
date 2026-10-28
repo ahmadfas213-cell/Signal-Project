@@ -1,5 +1,10 @@
 import http from "http"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { WebSocketServer, WebSocket } from "ws"
+
+const execFileAsync = promisify(execFile)
+const traceHosts = new Set(["cloudflare.com", "google.com", "github.com", "microsoft.com"])
 
 const PORT = Number(process.env.PORT || 3000)
 const nodes = [
@@ -181,6 +186,33 @@ const server = http.createServer((req, res) => {
     if (!globalProbeCache.results.length) void refreshGlobalProbes()
     res.writeHead(globalProbeCache.results.length ? 200 : 503)
     res.end(JSON.stringify({ source: "RIPE Atlas public probe registry", fetchedAt: globalProbeCache.fetchedAt ? new Date(globalProbeCache.fetchedAt).toISOString() : null, count: globalProbeCache.count, returned: globalProbeCache.results.length, results: globalProbeCache.results, error: globalProbeCache.error, note: "Probe locations and registry status are real; links and per-probe latency are not inferred from this endpoint." }))
+    return
+  }
+  if (req.url?.startsWith("/api/diagnostics/traceroute")) {
+    const requestUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`)
+    const host = requestUrl.searchParams.get("host") || "cloudflare.com"
+    if (!traceHosts.has(host)) {
+      res.writeHead(400)
+      res.end(JSON.stringify({ error: "Host is not in the allowed diagnostic target list", allowedHosts: [...traceHosts] }))
+      return
+    }
+    try {
+      let result
+      let command = "traceroute"
+      try {
+        result = await execFileAsync("traceroute", ["-n", "-m", "12", "-w", "1", host], { timeout: 16000, maxBuffer: 128 * 1024 })
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error
+        command = "tracepath"
+        result = await execFileAsync("tracepath", ["-m", "12", host], { timeout: 16000, maxBuffer: 128 * 1024 })
+      }
+      res.writeHead(200)
+      res.end(JSON.stringify({ host, command, output: result.stdout.trim(), completedAt: new Date().toISOString(), note: "Hop visibility depends on host network permissions and intermediate routers; missing hops do not prove packet loss." }))
+    } catch (error) {
+      const unavailable = error?.code === "ENOENT"
+      res.writeHead(unavailable ? 501 : 502)
+      res.end(JSON.stringify({ host, error: unavailable ? "Traceroute utilities are not installed on this hosting node." : error?.killed ? "Traceroute exceeded the 16-second limit." : (error?.stderr || error?.message || "Traceroute failed").toString().slice(0, 1500), note: "This is a real system traceroute attempt. The hosting provider may disable the utility or restrict network probes." }))
+    }
     return
   }
   if (req.url === "/api/network" || req.url === "/api/probes") {
