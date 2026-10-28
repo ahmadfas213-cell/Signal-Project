@@ -30,6 +30,8 @@ type Runtime = {
   status: NodeStatus
 }
 
+type DeviceNetworkInfo = { effectiveType?: string; downlink?: number; rtt?: number; type?: string; saveData?: boolean }
+
 type NetworkData = {
   timestamp: string
   latency: number | null
@@ -122,6 +124,7 @@ function App() {
   const [tab, setTab] = useState<"Overview" | "Metrics" | "Logs" | "Alerts">("Overview")
   const [serverOnline, setServerOnline] = useState(false)
   const [clientRtt, setClientRtt] = useState<number | null>(null)
+  const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkInfo | null>(null)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -141,6 +144,18 @@ function App() {
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(clock)
+  }, [])
+
+  useEffect(() => {
+    const connection = (navigator as Navigator & { connection?: DeviceNetworkInfo & { addEventListener?: (type: string, listener: () => void) => void; removeEventListener?: (type: string, listener: () => void) => void } }).connection
+    if (!connection) {
+      setDeviceNetwork(null)
+      return
+    }
+    const update = () => setDeviceNetwork({ effectiveType: connection.effectiveType, downlink: connection.downlink, rtt: connection.rtt, type: connection.type, saveData: connection.saveData })
+    update()
+    connection.addEventListener?.("change", update)
+    return () => connection.removeEventListener?.("change", update)
   }, [])
 
   const previousRuntime = useRef<Record<string, Runtime>>(initialRuntime)
@@ -725,7 +740,7 @@ function App() {
                   <span><i className="purple-dot" />100-200ms <b>{latencyDistribution[3]}%</b></span>
                   <span><i className="red-dot" />&gt; 200ms <b>{latencyDistribution[4]}%</b></span>
                 </div>
-                <div className="probe-list">{(network.probes ?? []).map((probe) => <div className="probe-row" key={probe.id}><span className={`status-dot ${probe.status === "online" ? "" : "offline"}`} /><span>{probe.name}</span><strong>{probe.latency === null ? "Timeout" : `${probe.latency} ms`}</strong><small>{probe.httpStatus ? `HTTP ${probe.httpStatus}` : probe.status}</small></div>)}</div>
+                <div className="probe-list">{(network.probes ?? []).map((probe) => <div className="probe-row" key={probe.id}><span className={`status-dot ${probe.status === "online" ? "" : "offline"}`} /><span>{probe.name}</span><strong>{probe.latency === null ? "Timeout" : `${probe.latency} ms`}</strong><small>{probe.httpStatus ? `HTTP ${probe.httpStatus}` : probe.status}</small></div>)}</div><div className="browser-link"><div><span className="eyebrow">BROWSER NETWORK ESTIMATE</span><strong>{deviceNetwork?.effectiveType ?? deviceNetwork?.type ?? "Not exposed by browser"}</strong></div><div><span>Downlink estimate</span><b>{deviceNetwork?.downlink === undefined ? "—" : `${deviceNetwork.downlink} Mbps`}</b></div><div><span>Browser RTT estimate</span><b>{deviceNetwork?.rtt === undefined ? "—" : `${deviceNetwork.rtt} ms`}</b></div><small>Browser-reported estimate only, not radio signal strength in dBm.</small></div>
               </div>
             </div>
 
