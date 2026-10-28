@@ -68,6 +68,18 @@ const nodes: NetworkNode[] = [
   { id: "mobile", name: "User Mobile", location: "Jakarta", type: "mobile", x: 26, y: 82 },
 ]
 
+const topologyConnections: Array<[string, string]> = [
+  ["client", "router"],
+  ["mobile", "router"],
+  ["router", "cdn"],
+  ["router", "api"],
+  ["api", "database"],
+  ["api", "cache"],
+  ["cache", "database"],
+  ["cache", "backup"],
+  ["monitor", "router"],
+  ["monitor", "api"],
+]
 
 const initialRuntime: Record<string, Runtime> = {
   client: { latency: 32, packetLoss: 0.12, uptime: 99.98, status: "online" },
@@ -785,6 +797,28 @@ function App() {
 
               {selectedTopology === "Global Internet" && <div className="global-leaflet-map" ref={globalMapElement} aria-label="Interactive geographic map of RIPE Atlas probes" />}
               {selectedTopology === "Global Internet" && selectedGlobalProbe && <div className="global-probe-detail"><div><span className="eyebrow">RIPE ATLAS PROBE</span><button type="button" onClick={() => setSelectedGlobalProbe(null)} aria-label="Close probe details">×</button></div><strong>Probe #{selectedGlobalProbe.id}</strong><dl><dt>Country</dt><dd>{selectedGlobalProbe.country}</dd><dt>ASN</dt><dd>{selectedGlobalProbe.asn ? `AS${selectedGlobalProbe.asn}` : "Not reported"}</dd><dt>Latitude</dt><dd>{selectedGlobalProbe.latitude.toFixed(4)}°</dd><dt>Longitude</dt><dd>{selectedGlobalProbe.longitude.toFixed(4)}°</dd><dt>Registry status</dt><dd>{selectedGlobalProbe.status}</dd></dl><small>Registry metadata only. This view has no latency measurement for this probe.</small></div>}
+              {selectedTopology !== "Global Internet" && (layers.connections || layers.packets) && (
+                <svg className="connection-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  {topologyConnections.map(([fromId, toId], index) => {
+                    const from = nodes.find((node) => node.id === fromId)
+                    const to = nodes.find((node) => node.id === toId)
+                    if (!from || !to) return null
+                    const path = `M ${from.x} ${from.y} L ${to.x} ${to.y}`
+                    const status = (runtime[toId] ?? initialRuntime[toId]).status
+                    return (
+                      <g className={`connection-group ${status === "warning" ? "warning" : status === "critical" ? "critical" : ""}`} key={fromId + "-" + toId}>
+                        {layers.connections && <path d={path} className="connection-line" />}
+                        {layers.packets && layers.traffic && !paused && <circle r="0.48" className="packet">
+                          <animateMotion path={path} dur={`${(3.2 + (index % 4) * 0.8) / speed}s`} repeatCount="indefinite" begin={`${index * -0.47}s`} />
+                        </circle>}
+                        {layers.packets && layers.traffic && !paused && <circle r="0.28" className="packet packet-secondary">
+                          <animateMotion path={path} dur={`${(4.8 + (index % 3) * 0.7) / speed}s`} repeatCount="indefinite" begin={`${index * -0.83 - 1}s`} />
+                        </circle>}
+                      </g>
+                    )
+                  })}
+                </svg>
+              )}
               {selectedTopology !== "Global Internet" && layers.nodes && (
                 <div className="node-layer" style={{ transform: `scale(${zoom})` }}>
                   {nodes.map((node) => {
