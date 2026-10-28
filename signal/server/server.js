@@ -88,7 +88,8 @@ function networkData() {
   const nodeData = nodes.map(updateDemoNode)
   const successful = probes.filter((probe) => probe.status === "online" && Number.isFinite(probe.latency))
   const latency = successful.length ? Math.round(successful.reduce((sum, probe) => sum + probe.latency, 0) / successful.length) : null
-  const packetLoss = probes.length ? Number(((probes.length - successful.length) / probes.length * 100).toFixed(2)) : null
+  const probesReady = probes.length > 0 && probes.every((probe) => probe.status !== "pending")
+  const packetLoss = probesReady ? Number(((probes.length - successful.length) / probes.length * 100).toFixed(2)) : null
   const trafficTarget = 1350 + Math.sin(Date.now() / 5500) * 420 + (Math.random() - 0.5) * 220
   traffic = Math.round(clamp(nextValue(traffic, trafficTarget, 0.24), 500, 2400))
   return {
