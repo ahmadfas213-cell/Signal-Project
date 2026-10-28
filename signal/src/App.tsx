@@ -138,7 +138,6 @@ function App() {
   const globalMapElement = useRef<HTMLDivElement | null>(null)
   const globalMapInstance = useRef<any>(null)
   const globalMapMarkers = useRef<any>(null)
-  const [worldLandPaths, setWorldLandPaths] = useState<string[]>([])
   const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
   const [globalCountryFilter, setGlobalCountryFilter] = useState("ALL")
   const [selectedGlobalProbe, setSelectedGlobalProbe] = useState<GlobalProbe | null>(null)
@@ -282,47 +281,6 @@ function App() {
     })
     return () => { disposed = true }
   }, [selectedTopology, activePage, globalVisibleProbes, layers.nodes])
-
-  useEffect(() => {
-    let disposed = false
-    const loadWorldMap = async () => {
-      try {
-        const response = await fetch("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson", { cache: "force-cache" })
-        if (!response.ok) throw new Error("World map data unavailable")
-        const geo = await response.json() as { features?: Array<{ geometry?: { type?: string; coordinates?: unknown } }> }
-        const projectRing = (ring: unknown) => {
-          if (!Array.isArray(ring)) return ""
-          return ring.map((point) => {
-            if (!Array.isArray(point) || typeof point[0] !== "number" || typeof point[1] !== "number") return ""
-            const x = ((point[0] + 180) / 360) * 1000
-            const y = ((90 - point[1]) / 180) * 620
-            return `${x.toFixed(2)},${y.toFixed(2)}`
-          }).filter(Boolean).join(" ")
-        }
-        const paths: string[] = []
-        for (const feature of geo.features ?? []) {
-          const geometry = feature.geometry
-          if (!geometry) continue
-          const polygons = geometry.type === "Polygon"
-            ? [geometry.coordinates as unknown[][]]
-            : geometry.type === "MultiPolygon"
-              ? geometry.coordinates as unknown[][][]
-              : []
-          for (const polygon of polygons) {
-            for (const ring of polygon) {
-              const points = projectRing(ring)
-              if (points) paths.push("M" + points.replaceAll(" ", "L") + "Z")
-            }
-          }
-        }
-        if (!disposed) setWorldLandPaths(paths)
-      } catch {
-        if (!disposed) setWorldLandPaths([])
-      }
-    }
-    void loadWorldMap()
-    return () => { disposed = true }
-  }, [])
 
   useEffect(() => {
     const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
@@ -550,7 +508,6 @@ function App() {
   const formatTraffic = (value: number) =>
     value >= 1000 ? `${(value / 1000).toFixed(2)}k/s` : `${value}/s`
 
-  const visibleConnections = layers.connections ? connections : []
 
   const chartPoints = useMemo(() => {
     const values = trafficHistory.length ? trafficHistory : [network.traffic]
