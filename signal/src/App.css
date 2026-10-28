@@ -1605,3 +1605,17 @@ button {
   .sla-controls { grid-template-columns: 1fr; }
   .sla-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.ops-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:18px 0 28px; }
+.ops-card { display:flex; flex-direction:column; align-items:flex-start; gap:9px; min-width:0; padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.025); }
+.ops-card h3 { margin:0; color:var(--text,#dce5e8); font-size:14px; }
+.ops-card p,.ops-card small { margin:0; color:var(--muted,#829199); font-size:10px; line-height:1.55; }
+.ops-card input:not([type=file]),.ops-card select { width:100%; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:7px; color:var(--text,#dce5e8); background:rgba(0,0,0,.18); font:inherit; font-size:11px; }
+.ops-number { color:var(--cyan,#20d8ff); font-size:23px; }
+.ops-card .export { margin-top:auto; }
+.ops-file { display:flex; flex-direction:column; gap:8px; color:var(--text,#dce5e8); font-size:10px; }
+.ops-file input { max-width:100%; font-size:10px; }
+.ops-subheading { margin-top:24px; }
+.export.danger { border-color:rgba(255,92,110,.4); color:#ff7e8a; }
+.incident-card .export { flex-shrink:0; }
+@media (max-width:650px) { .ops-grid { grid-template-columns:1fr; } .incident-card { flex-wrap:wrap; } }
