@@ -1702,3 +1702,51 @@ button {
   .status-overview-card, .correlation-row, .incident-card, .report-card, .diagnostic-card, .page-table, .history-summary article { background: #fff !important; color: #111 !important; border: 1px solid #bbb !important; box-shadow: none !important; }
   h1, h2, h3, strong, p, span, small, td, th { color: #111 !important; }
 }
+
+
+.route-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.route-controls select {
+  min-width: 150px;
+  padding: 10px 12px;
+  color: var(--text-primary, #e7f0f2);
+  background: var(--panel, #111b24);
+  border: 1px solid rgba(116, 157, 169, 0.32);
+  border-radius: 8px;
+}
+.route-result {
+  margin-top: 12px;
+}
+.route-result-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.route-result-heading span {
+  color: #65d9b2;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+.route-result pre {
+  max-height: 420px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(3, 10, 16, 0.62);
+  border: 1px solid rgba(116, 157, 169, 0.16);
+  color: #b7d9df;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.route-result > small {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-muted, #8c9ba4);
+  line-height: 1.6;
+}
