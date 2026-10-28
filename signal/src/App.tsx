@@ -106,7 +106,7 @@ function App() {
     traffic: 1284,
     packetLoss: 0.24,
     nodes: 9,
-    connections: 18,
+    connections: 11,
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
@@ -324,7 +324,7 @@ function App() {
             ["△", "Incidents"],
             ["□", "History"],
             ["▤", "Reports"],
-          ].map(([ico, label], index) => (
+          ].map(([ico, label]) => (
             <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
               <b>{label}</b>
@@ -335,7 +335,7 @@ function App() {
         <div className="menu-section">
           <span>TOPOLOGIES</span>
           {["Production", "Staging", "Singapore Cluster", "Tokyo Edge", "New York DC"].map((label, index) => (
-            <button className={`menu ${selectedTopology === label ? "topology-active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview") }}>
+            <button className={`menu ${selectedTopology === label ? "topology-active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview"); setEventLog((current) => [{ time: new Date().toLocaleTimeString("en-GB"), tone: "green", text: `Topology switched to ${label}` }, ...current].slice(0, 40)) }}>
               <i>♧</i>
               <b>{label}</b>
               {index === 0 && <em />}
@@ -539,7 +539,7 @@ function App() {
                 <button onClick={() => setZoom(1)}>⌗</button>
                 <button onClick={() => setZoom((v) => Math.min(1.18, v + 0.08))}>＋</button>
                 <button onClick={() => setZoom((v) => Math.max(0.88, v - 0.08))}>−</button>
-                <button>♧</button>
+                <button onClick={() => setZoom(1)} aria-label="Reset map zoom">♧</button>
               </div>
             </section>
 
@@ -688,7 +688,7 @@ function App() {
             <div className="panel event-panel">
               <header>
                 <strong>EVENT LOG</strong>
-                <span>View All</span>
+                <button className="view-all" onClick={() => setActivePage("History")}>View All</button>
               </header>
 
               <div className="event-list">
