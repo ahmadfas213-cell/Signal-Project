@@ -350,7 +350,7 @@ function App() {
         <div className="menu-section">
           <span>TOPOLOGIES</span>
           {["Production", "Staging", "Singapore Cluster", "Tokyo Edge", "New York DC"].map((label, index) => (
-            <button className={`menu ${selectedTopology === label ? "topology-active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview"); setEventLog((current) => [{ time: new Date().toLocaleTimeString("en-GB"), tone: "green", text: `Topology switched to ${label}` }, ...current].slice(0, 40)) }}>
+            <button className={`menu ${selectedTopology === label ? "active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview"); setEventLog((current) => [{ time: new Date().toLocaleTimeString("en-GB"), tone: "green", text: `Topology switched to ${label}` }, ...current].slice(0, 40)) }}>
               <i>♧</i>
               <b>{label}</b>
               {index === 0 && <em />}
