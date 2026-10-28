@@ -130,6 +130,7 @@ function App() {
   const [globalProbeData, setGlobalProbeData] = useState<GlobalProbeResponse | null>(null)
   const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
   const [globalCountryFilter, setGlobalCountryFilter] = useState("ALL")
+  const [selectedGlobalProbe, setSelectedGlobalProbe] = useState<GlobalProbe | null>(null)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -609,7 +610,8 @@ function App() {
                 })}
               </svg>
 
-              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{globalVisibleProbes.map((probe) => <span key={probe.id} className="global-probe-dot" style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /> </span>)}</div>}
+              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{globalVisibleProbes.map((probe) => <button key={probe.id} type="button" className={`global-probe-dot ${selectedGlobalProbe?.id === probe.id ? "selected" : ""}`} style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} onClick={() => setSelectedGlobalProbe(probe)} aria-label={`Show RIPE Atlas probe ${probe.id} in ${probe.country}`} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /></button>)}</div>}
+              {selectedTopology === "Global Internet" && selectedGlobalProbe && <div className="global-probe-detail"><div><span className="eyebrow">RIPE ATLAS PROBE</span><button type="button" onClick={() => setSelectedGlobalProbe(null)} aria-label="Close probe details">×</button></div><strong>Probe #{selectedGlobalProbe.id}</strong><dl><dt>Country</dt><dd>{selectedGlobalProbe.country}</dd><dt>ASN</dt><dd>{selectedGlobalProbe.asn ? `AS${selectedGlobalProbe.asn}` : "Not reported"}</dd><dt>Latitude</dt><dd>{selectedGlobalProbe.latitude.toFixed(4)}°</dd><dt>Longitude</dt><dd>{selectedGlobalProbe.longitude.toFixed(4)}°</dd><dt>Registry status</dt><dd>{selectedGlobalProbe.status}</dd></dl><small>Registry metadata only. This view has no latency measurement for this probe.</small></div>}
               {selectedTopology !== "Global Internet" && layers.nodes && (
                 <div className="node-layer" style={{ transform: `scale(${zoom})` }}>
                   {nodes.map((node) => {
