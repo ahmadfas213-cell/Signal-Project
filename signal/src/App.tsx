@@ -135,6 +135,7 @@ function App() {
   const [clientRtt, setClientRtt] = useState<number | null>(null)
   const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkInfo | null>(null)
   const [globalProbeData, setGlobalProbeData] = useState<GlobalProbeResponse | null>(null)
+  const [worldLandPaths, setWorldLandPaths] = useState<string[]>([])
   const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
   const [globalCountryFilter, setGlobalCountryFilter] = useState("ALL")
   const [selectedGlobalProbe, setSelectedGlobalProbe] = useState<GlobalProbe | null>(null)
@@ -200,6 +201,47 @@ function App() {
     }
     window.addEventListener("keydown", handleShortcut)
     return () => window.removeEventListener("keydown", handleShortcut)
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    const loadWorldMap = async () => {
+      try {
+        const response = await fetch("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson", { cache: "force-cache" })
+        if (!response.ok) throw new Error("World map data unavailable")
+        const geo = await response.json() as { features?: Array<{ geometry?: { type?: string; coordinates?: unknown } }> }
+        const projectRing = (ring: unknown) => {
+          if (!Array.isArray(ring)) return ""
+          return ring.map((point) => {
+            if (!Array.isArray(point) || typeof point[0] !== "number" || typeof point[1] !== "number") return ""
+            const x = ((point[0] + 180) / 360) * 1000
+            const y = ((90 - point[1]) / 180) * 620
+            return `${x.toFixed(2)},${y.toFixed(2)}`
+          }).filter(Boolean).join(" ")
+        }
+        const paths: string[] = []
+        for (const feature of geo.features ?? []) {
+          const geometry = feature.geometry
+          if (!geometry) continue
+          const polygons = geometry.type === "Polygon"
+            ? [geometry.coordinates as unknown[][]]
+            : geometry.type === "MultiPolygon"
+              ? geometry.coordinates as unknown[][][]
+              : []
+          for (const polygon of polygons) {
+            for (const ring of polygon) {
+              const points = projectRing(ring)
+              if (points) paths.push("M" + points.replaceAll(" ", "L") + "Z")
+            }
+          }
+        }
+        if (!disposed) setWorldLandPaths(paths)
+      } catch {
+        if (!disposed) setWorldLandPaths([])
+      }
+    }
+    void loadWorldMap()
+    return () => { disposed = true }
   }, [])
 
   useEffect(() => {
@@ -716,16 +758,7 @@ function App() {
                   <path d="M0 103H1000 M0 207H1000 M0 310H1000 M0 413H1000 M0 517H1000 M166 0V620 M333 0V620 M500 0V620 M666 0V620 M833 0V620" />
                 </g>
                 <g className="world-land">
-                  <path d="M38 118 L65 87 111 72 157 80 186 97 226 105 254 137 270 158 252 180 226 190 216 221 195 231 182 207 163 188 145 172 123 160 98 145 70 143 Z" />
-                  <path d="M253 270 L283 257 315 275 342 301 355 334 346 367 329 399 318 438 299 478 286 448 276 412 265 378 257 341 Z" />
-                  <path d="M321 70 L348 51 378 58 398 78 386 101 365 112 340 100 Z" />
-                  <path d="M447 143 L466 124 488 128 502 144 490 160 469 162 Z" />
-                  <path d="M457 176 L481 165 506 180 520 213 511 246 493 281 477 315 458 300 446 270 438 235 442 204 Z" />
-                  <path d="M497 132 L527 108 570 98 608 107 640 96 687 106 724 125 766 132 806 155 845 177 830 196 790 193 763 213 727 207 699 230 667 222 646 202 615 208 588 190 562 194 538 173 514 166 Z" />
-                  <path d="M526 205 L550 202 568 222 565 246 548 258 534 238 Z" />
-                  <path d="M754 304 L790 294 828 306 849 326 835 348 802 353 775 336 Z" />
-                  <path d="M849 375 L880 366 914 382 925 406 903 426 870 420 850 401 Z" />
-                  <path d="M901 238 L920 228 935 242 927 262 909 265 Z" />
+                  {worldLandPaths.map((path, index) => <path key={index} d={path} />)}
                 </g>
               </svg>}
               <svg
