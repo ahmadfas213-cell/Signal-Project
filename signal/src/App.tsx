@@ -33,6 +33,8 @@ type Runtime = {
 type DeviceNetworkInfo = { effectiveType?: string; downlink?: number; rtt?: number; type?: string; saveData?: boolean }
 type GlobalProbe = { id: number; country: string; latitude: number; longitude: number; asn: number | null; status: string }
 type GlobalProbeResponse = { source: string; fetchedAt: string | null; count: number; returned: number; results: GlobalProbe[]; error: string | null; note: string }
+type CustomEndpoint = { id: string; name: string; url: string; enabled: boolean; status: "pending" | "online" | "failed" | "blocked"; latency: number | null; checkedAt: string | null; error: string | null }
+type HistorySample = { timestamp: string; latency: number | null; packetLoss: number | null; traffic: number; healthScore: number | null }
 
 type NetworkData = {
   timestamp: string
@@ -117,7 +119,7 @@ function App() {
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
-  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports">("Overview")
+  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints">("Overview")
   const [selectedTopology, setSelectedTopology] = useState("Production")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -145,7 +147,22 @@ function App() {
   const [now, setNow] = useState(new Date())
   const [trafficHistory, setTrafficHistory] = useState<number[]>([1284])
   const [eventLog, setEventLog] = useState<Array<{ time: string; tone: string; text: string }>>([])
-  const [alerts, setAlerts] = useState<Array<{ tone: string; text: string; time: string }>>([])
+  const [alerts, setAlerts] = useState<Array<{ tone: string; text: string; time: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem("signal-alerts-v1") || "[]") } catch { return [] }
+  })
+  const [customEndpoints, setCustomEndpoints] = useState<CustomEndpoint[]>(() => {
+    try { return JSON.parse(localStorage.getItem("signal-endpoints-v1") || "[]") } catch { return [] }
+  })
+  const [endpointName, setEndpointName] = useState("")
+  const [endpointUrl, setEndpointUrl] = useState("")
+  const [latencyThreshold, setLatencyThreshold] = useState(() => Number(localStorage.getItem("signal-latency-threshold") || 150))
+  const [lossThreshold, setLossThreshold] = useState(() => Number(localStorage.getItem("signal-loss-threshold") || 5))
+  const [historySamples, setHistorySamples] = useState<HistorySample[]>(() => {
+    try { return JSON.parse(localStorage.getItem("signal-history-v1") || "[]") } catch { return [] }
+  })
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const lastHistorySaved = useRef(0)
+  const thresholdState = useRef({ latency: false, loss: false })
 
   const globalCountries = useMemo(() => [...new Set((globalProbeData?.results ?? []).map((probe) => probe.country))].filter((country) => country !== "Unknown").sort(), [globalProbeData])
   const globalVisibleProbes = useMemo(() => (globalProbeData?.results ?? []).filter((probe) => globalCountryFilter === "ALL" || probe.country === globalCountryFilter), [globalProbeData, globalCountryFilter])
@@ -189,6 +206,60 @@ function App() {
   }, [])
 
   const previousRuntime = useRef<Record<string, Runtime>>(initialRuntime)
+
+  useEffect(() => { localStorage.setItem("signal-alerts-v1", JSON.stringify(alerts.slice(0, 100))) }, [alerts])
+  useEffect(() => { localStorage.setItem("signal-endpoints-v1", JSON.stringify(customEndpoints)) }, [customEndpoints])
+  useEffect(() => { localStorage.setItem("signal-latency-threshold", String(latencyThreshold)) }, [latencyThreshold])
+  useEffect(() => { localStorage.setItem("signal-loss-threshold", String(lossThreshold)) }, [lossThreshold])
+  useEffect(() => { localStorage.setItem("signal-history-v1", JSON.stringify(historySamples.slice(-500))) }, [historySamples])
+
+  useEffect(() => {
+    if (!customEndpoints.some((endpoint) => endpoint.enabled)) return
+    let disposed = false
+    const check = async (endpoint: CustomEndpoint) => {
+      const started = performance.now()
+      try {
+        const response = await fetch(endpoint.url, { method: "GET", mode: "cors", cache: "no-store", signal: AbortSignal.timeout(8000) })
+        await response.body?.cancel()
+        const checkedAt = new Date().toISOString()
+        if (!disposed) setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status: response.ok || response.status < 500 ? "online" : "failed", latency: Math.round(performance.now() - started), checkedAt, error: response.ok || response.status < 500 ? null : `HTTP ${response.status}` } : item))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Request failed"
+        const blocked = /cors|failed to fetch|networkerror/i.test(message)
+        if (!disposed) setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, status: blocked ? "blocked" : "failed", latency: null, checkedAt: new Date().toISOString(), error: blocked ? "Request blocked or CORS unavailable" : message } : item))
+      }
+    }
+    const run = () => customEndpoints.filter((endpoint) => endpoint.enabled).forEach((endpoint) => { void check(endpoint) })
+    run()
+    const timer = window.setInterval(run, 30000)
+    return () => { disposed = true; window.clearInterval(timer) }
+  }, [customEndpoints.filter((endpoint) => endpoint.enabled).map((endpoint) => endpoint.id + endpoint.url).join("|")])
+
+  useEffect(() => {
+    const latencyHigh = network.latency !== null && network.latency > latencyThreshold
+    const lossHigh = network.packetLoss !== null && network.packetLoss > lossThreshold
+    const fired: string[] = []
+    if (latencyHigh && !thresholdState.current.latency) fired.push(`Average endpoint latency exceeded ${latencyThreshold} ms (${network.latency} ms)`)
+    if (lossHigh && !thresholdState.current.loss) fired.push(`Probe failure rate exceeded ${lossThreshold}% (${network.packetLoss}%)`)
+    thresholdState.current = { latency: latencyHigh, loss: lossHigh }
+    if (fired.length) {
+      const timestamp = new Date().toLocaleTimeString("en-GB")
+      setAlerts((current) => [...fired.map((text) => ({ tone: "red", text, time: timestamp })), ...current].slice(0, 100))
+      setEventLog((current) => [...fired.map((text) => ({ tone: "red", text: `ALERT: ${text}`, time: timestamp })), ...current].slice(0, 100))
+      if (notificationsEnabled && "Notification" in window && Notification.permission === "granted") fired.forEach((text) => new Notification("SIGNAL threshold alert", { body: text }))
+    }
+  }, [network.latency, network.packetLoss, latencyThreshold, lossThreshold, notificationsEnabled])
+
+  useEffect(() => {
+    if (!serverOnline) return
+    const stamp = Date.now()
+    if (stamp - lastHistorySaved.current < 10000) return
+    lastHistorySaved.current = stamp
+    const healthy = network.probes ?? []
+    const online = healthy.filter((probe) => probe.status === "online").length
+    const score = healthy.length ? Math.round((online / healthy.length) * 75 + (clientRtt === null ? 0 : Math.max(0, 25 * (1 - Math.min(clientRtt, 500) / 500)))) : null
+    setHistorySamples((current) => [...current, { timestamp: new Date().toISOString(), latency: network.latency, packetLoss: network.packetLoss, traffic: network.traffic, healthScore: score }].slice(-500))
+  }, [network.timestamp, network.latency, network.packetLoss, network.traffic, network.probes, clientRtt, serverOnline])
 
   useEffect(() => {
     const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
@@ -421,6 +492,7 @@ function App() {
             ["△", "Incidents"],
             ["□", "History"],
             ["▤", "Reports"],
+            ["⌁", "Endpoints"],
           ].map(([ico, label]) => (
             <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
@@ -882,6 +954,33 @@ function App() {
           </>
           ) : (
             <section className="page-view">
+              {activePage === "Endpoints" && <>
+                <div className="page-heading"><div><span className="eyebrow">CUSTOM MONITORING</span><h1>Endpoint monitor</h1><p>Monitor public HTTP(S) endpoints from this browser. Checks repeat every 30 seconds while this page is open.</p></div><span className="page-count">{customEndpoints.length} endpoints</span></div>
+                <form className="endpoint-form" onSubmit={(event) => {
+                  event.preventDefault()
+                  const name = endpointName.trim() || new URL(endpointUrl).hostname
+                  let parsed: URL
+                  try { parsed = new URL(endpointUrl.trim()) } catch { setDiagnostic("Enter a valid endpoint URL"); return }
+                  if (!["http:", "https:"].includes(parsed.protocol)) { setDiagnostic("Only HTTP and HTTPS endpoints are supported"); return }
+                  if (customEndpoints.some((item) => item.url === parsed.href)) { setDiagnostic("That endpoint is already being monitored"); return }
+                  setCustomEndpoints((current) => [...current, { id: crypto.randomUUID(), name, url: parsed.href, enabled: true, status: "pending", latency: null, checkedAt: null, error: null }])
+                  setEndpointName(""); setEndpointUrl(""); setDiagnostic("Endpoint added. First check is starting.")
+                }}>
+                  <label><span>Endpoint name</span><input value={endpointName} onChange={(event) => setEndpointName(event.target.value)} placeholder="My API" maxLength={50} /></label>
+                  <label><span>Public URL</span><input value={endpointUrl} onChange={(event) => setEndpointUrl(event.target.value)} placeholder="https://example.com/health" type="url" required /></label>
+                  <button type="submit" className="export">+ Add endpoint</button>
+                </form>
+                <p className="endpoint-note">Checks run in your browser. Some websites block cross-origin requests, so “Blocked / CORS” does not necessarily mean the service is down. Endpoints are saved only in this browser.</p>
+                <div className="endpoint-grid">{customEndpoints.map((endpoint) => <article className="endpoint-card" key={endpoint.id}>
+                  <header><span className={`status-dot ${endpoint.status === "online" ? "" : endpoint.status === "pending" ? "pending" : "offline"}`} /><strong>{endpoint.name}</strong><span className={`endpoint-status ${endpoint.status}`}>{endpoint.status.toUpperCase()}</span></header>
+                  <p className="endpoint-url">{endpoint.url}</p>
+                  <div className="endpoint-metrics"><div><span>Latency</span><strong>{endpoint.latency === null ? "—" : `${endpoint.latency} ms`}</strong></div><div><span>Last check</span><strong>{endpoint.checkedAt ? new Date(endpoint.checkedAt).toLocaleTimeString("en-GB") : "Waiting"}</strong></div></div>
+                  {endpoint.error && <small className="endpoint-error">{endpoint.error}</small>}
+                  <footer><button onClick={() => setCustomEndpoints((current) => current.map((item) => item.id === endpoint.id ? { ...item, enabled: !item.enabled } : item))}>{endpoint.enabled ? "Pause checks" : "Resume checks"}</button><button onClick={() => setCustomEndpoints((current) => current.filter((item) => item.id !== endpoint.id))}>Remove</button></footer>
+                </article>)}
+                {!customEndpoints.length && <div className="empty-state">No custom endpoints yet. Add an HTTP or HTTPS health URL above to start monitoring.</div>}</div>
+                <div className="diagnostic-card"><strong>Current diagnostic</strong><p>{diagnostic}</p></div>
+              </>}
               {activePage === "Nodes" && <>
                 <div className="page-heading"><div><span className="eyebrow">TOPOLOGY INVENTORY</span><h1>Network nodes</h1><p>Node status and performance for {selectedTopology}.</p></div><span className="page-count">{nodes.length} nodes</span></div>
                 <div className="page-table"><div className="table-row table-header"><span>Node</span><span>Location</span><span>Status</span><span>Latency</span><span>Packet loss</span><span>Uptime</span></div>{nodes.map((node) => { const item = runtime[node.id] ?? initialRuntime[node.id]; return <button className="table-row" key={node.id} onClick={() => { setSelectedId(node.id); setActivePage("Overview"); setDetailsOpen(true) }}><span><i className={`legend-dot ${item.status === "online" ? "" : item.status}`} />{node.name}</span><span>{node.location}</span><span className={item.status}>{item.status.toUpperCase()}</span><span>{item.latency} ms</span><span>{item.packetLoss.toFixed(2)}%</span><span>{item.uptime.toFixed(2)}%</span></button>})}</div>
@@ -891,7 +990,7 @@ function App() {
                 <div className="incident-list">{alerts.length ? alerts.map((item, index) => <article className={`incident-card ${item.tone}`} key={`${item.time}-${item.text}-${index}`}><i className={`legend-dot ${item.tone === "yellow" ? "warning" : item.tone}`} /><div><strong>{item.text}</strong><small>{item.time}</small></div></article>) : <div className="empty-state">No incidents recorded yet. Status changes will appear here.</div>}</div>
               </>}
               {activePage === "History" && <>
-                <div className="page-heading"><div><span className="eyebrow">TELEMETRY HISTORY</span><h1>Network history</h1><p>Recent traffic samples and status events in this session.</p></div><span className="page-count">{trafficHistory.length} samples</span></div>
+                <div className="page-heading"><div><span className="eyebrow">TELEMETRY HISTORY</span><h1>Network history</h1><p>Persistent local samples are stored in this browser, up to 500 points.</p></div><span className="page-count">{historySamples.length} samples</span></div><div className="history-summary"><article><span>Average latency</span><strong>{historySamples.filter((sample) => sample.latency !== null).length ? Math.round(historySamples.filter((sample) => sample.latency !== null).reduce((sum, sample) => sum + (sample.latency ?? 0), 0) / historySamples.filter((sample) => sample.latency !== null).length) + " ms" : "—"}</strong></article><article><span>Latest health score</span><strong>{historySamples.at(-1)?.healthScore === null || historySamples.length === 0 ? "—" : historySamples.at(-1)?.healthScore + "/100"}</strong></article><article><span>Stored locally</span><strong>{historySamples.length} points</strong></article></div><div className="history-chart">{historySamples.slice(-60).map((sample, index) => <div key={sample.timestamp} title={new Date(sample.timestamp).toLocaleString() + " · " + (sample.latency === null ? "No latency" : sample.latency + " ms")} style={{ height: Math.max(4, Math.min(100, sample.healthScore ?? 4)) + "%" }}><span>{index % 10 === 0 ? new Date(sample.timestamp).toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"}) : ""}</span></div>)}</div>
                 <div className="history-summary"><article><span>Current traffic</span><strong>{formatTraffic(network.traffic)}</strong></article><article><span>Live endpoint latency</span><strong>{network.latency === null ? "Measuring…" : `${network.latency} ms`}</strong></article><article><span>Probe failure rate</span><strong>{network.packetLoss === null ? "Measuring…" : `${network.packetLoss.toFixed(2)}%`}</strong></article></div>
                 <div className="page-table"><div className="table-row table-header"><span>Time</span><span>Event</span></div>{eventLog.length ? eventLog.map((item, index) => <div className="table-row history-row" key={`${item.time}-${item.text}-${index}`}><span>{item.time}</span><span>{item.text}</span></div>) : <div className="empty-state">No events recorded yet.</div>}</div>
               </>}
@@ -902,7 +1001,7 @@ function App() {
               </>}
             </section>
           )}
-          {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">External endpoint latency and probe loss are measured live by HTTP requests from the backend. Client RTT is measured from this browser to the SIGNAL server. Traffic and per-node topology telemetry remain simulated. Browsers cannot expose Wi-Fi/cellular signal strength in dBm, so this dashboard does not invent a signal-strength reading.</p></section></div>}
+          {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Latency alert threshold (ms)</span><input className="settings-number" type="number" min={1} max={5000} value={latencyThreshold} onChange={(event) => setLatencyThreshold(Math.max(1, Math.min(5000, Number(event.target.value) || 1)))} /></div><div className="settings-row"><span>Probe failure threshold (%)</span><input className="settings-number" type="number" min={0} max={100} step={0.5} value={lossThreshold} onChange={(event) => setLossThreshold(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /></div><div className="settings-row"><span>Desktop notifications</span><button onClick={async () => { if (!("Notification" in window)) { setDiagnostic("This browser does not support desktop notifications"); return } const permission = await Notification.requestPermission(); setNotificationsEnabled(permission === "granted"); setDiagnostic(permission === "granted" ? "Desktop alerts enabled" : "Desktop notification permission not granted") }}>{notificationsEnabled ? "Enabled" : "Enable alerts"}</button></div><div className="settings-row"><span>Persistent history</span><button onClick={() => { setHistorySamples([]); localStorage.removeItem("signal-history-v1"); setDiagnostic("Local history cleared") }}>Clear history</button></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">Custom endpoint checks run in this browser and may be blocked by CORS. Threshold alerts are generated when live measurements cross your configured limits. History and endpoint settings are stored locally in this browser. External endpoint latency and probe loss are measured live by HTTP requests from the backend. Client RTT is measured from this browser to the SIGNAL server. Traffic and per-node topology telemetry remain simulated. Browsers cannot expose Wi-Fi/cellular signal strength in dBm, so this dashboard does not invent a signal-strength reading.</p></section></div>}
         </div>
       </section>
     </main>
