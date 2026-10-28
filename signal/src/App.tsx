@@ -248,9 +248,10 @@ function App() {
           minZoom: 2,
           maxZoom: 8,
           worldCopyJump: true,
-          zoomControl: true,
+          zoomControl: false,
           preferCanvas: true,
         })
+        L.control.zoom({ position: "bottomright" }).addTo(map)
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
           maxZoom: 19,
