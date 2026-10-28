@@ -107,6 +107,45 @@ function networkData() {
   }
 }
 
+let globalProbeCache = { fetchedAt: 0, results: [], count: 0, error: null }
+let globalProbeBusy = false
+
+async function refreshGlobalProbes() {
+  if (globalProbeBusy || Date.now() - globalProbeCache.fetchedAt < 300000) return
+  globalProbeBusy = true
+  try {
+    const response = await fetch("https://atlas.ripe.net/api/v2/probes/?status=1&is_public=true&limit=500", {
+      headers: { accept: "application/json", "user-agent": "SIGNAL-Global-Network-Map/1.0" },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!response.ok) throw new Error(`RIPE Atlas returned HTTP ${response.status}`)
+    const payload = await response.json()
+    const results = (payload.results || []).map((probe) => {
+      const coordinates = probe.geometry?.coordinates
+      if (!Array.isArray(coordinates) || coordinates.length < 2) return null
+      const longitude = Number(coordinates[0])
+      const latitude = Number(coordinates[1])
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null
+      return {
+        id: probe.id,
+        country: probe.country_code || "Unknown",
+        latitude,
+        longitude,
+        asn: probe.asn_v4 || probe.asn_v6 || null,
+        status: probe.status?.name || "Connected",
+        statusSince: probe.status_since || null,
+      }
+    }).filter(Boolean)
+    globalProbeCache = { fetchedAt: Date.now(), results, count: Number(payload.count || results.length), error: null }
+  } catch (error) {
+    globalProbeCache = { ...globalProbeCache, error: error instanceof Error ? error.message : "Global probe data unavailable" }
+  } finally {
+    globalProbeBusy = false
+  }
+}
+
+void refreshGlobalProbes()
+
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -118,7 +157,7 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: "healthy", timestamp: new Date().toISOString(), uptime: process.uptime(), server: "SIGNAL", websocket: "enabled", mode: "live-http-probes-plus-simulated-topology" }))
     return
   }
-  if (req.url === "/api/network" || req.url === "/api/probes") {
+  if (req.url === "/api/global-probes") {\n    if (!globalProbeCache.results.length) void refreshGlobalProbes()\n    res.writeHead(globalProbeCache.results.length ? 200 : 503)\n    res.end(JSON.stringify({ source: "RIPE Atlas public probe registry", fetchedAt: globalProbeCache.fetchedAt ? new Date(globalProbeCache.fetchedAt).toISOString() : null, count: globalProbeCache.count, returned: globalProbeCache.results.length, results: globalProbeCache.results, error: globalProbeCache.error, note: "Probe locations and registry status are real; links and per-probe latency are not inferred from this endpoint." }))\n    return\n  }\n  if (req.url === "/api/network" || req.url === "/api/probes") {
     const data = networkData()
     res.writeHead(200)
     res.end(JSON.stringify(req.url === "/api/probes" ? { timestamp: data.timestamp, latency: data.latency, packetLoss: data.packetLoss, probes: data.probes, source: data.source } : data))
