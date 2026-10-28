@@ -129,6 +129,7 @@ function App() {
   const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkInfo | null>(null)
   const [globalProbeData, setGlobalProbeData] = useState<GlobalProbeResponse | null>(null)
   const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
+  const [globalCountryFilter, setGlobalCountryFilter] = useState("ALL")
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -144,6 +145,9 @@ function App() {
   const [trafficHistory, setTrafficHistory] = useState<number[]>([1284])
   const [eventLog, setEventLog] = useState<Array<{ time: string; tone: string; text: string }>>([])
   const [alerts, setAlerts] = useState<Array<{ tone: string; text: string; time: string }>>([])
+
+  const globalCountries = useMemo(() => [...new Set((globalProbeData?.results ?? []).map((probe) => probe.country))].filter((country) => country !== "Unknown").sort(), [globalProbeData])
+  const globalVisibleProbes = useMemo(() => (globalProbeData?.results ?? []).filter((probe) => globalCountryFilter === "ALL" || probe.country === globalCountryFilter), [globalProbeData, globalCountryFilter])
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000)
@@ -605,7 +609,7 @@ function App() {
                 })}
               </svg>
 
-              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{(globalProbeData?.results ?? []).map((probe) => <span key={probe.id} className="global-probe-dot" style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /> </span>)}</div>}
+              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{globalVisibleProbes.map((probe) => <span key={probe.id} className="global-probe-dot" style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /> </span>)}</div>}
               {selectedTopology !== "Global Internet" && layers.nodes && (
                 <div className="node-layer" style={{ transform: `scale(${zoom})` }}>
                   {nodes.map((node) => {
