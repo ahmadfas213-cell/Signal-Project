@@ -201,7 +201,6 @@ function App() {
         }
 
         setTrafficHistory((current) => [...current, data.traffic].slice(-30))
-        setLatencyHistory((current) => [...current, data.latency].slice(-30))
       } catch (error) {
         console.error("SIGNAL WebSocket:", error)
       }
