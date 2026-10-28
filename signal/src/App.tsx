@@ -105,9 +105,9 @@ function icon(type: NodeType) {
 function App() {
   const [network, setNetwork] = useState<NetworkData>({
     timestamp: new Date().toISOString(),
-    latency: 42,
+    latency: null,
     traffic: 1284,
-    packetLoss: 0.24,
+    packetLoss: null,
     nodes: 9,
     connections: 11,
   })
@@ -283,17 +283,17 @@ function App() {
   const simulatedRam = Math.min(96, Math.max(24, Math.round(40 + selected.packetLoss * 7)))
   const simulatedErrorRate = Number((selected.packetLoss * 1.8).toFixed(2))
   const latencyDistribution = useMemo(() => {
-    const values = Object.values(runtime)
+    const values = (network.probes ?? []).filter((probe) => probe.status === "online" && probe.latency !== null).map((probe) => probe.latency as number)
     const total = Math.max(1, values.length)
     const buckets = [
-      values.filter((item) => item.latency < 20).length,
-      values.filter((item) => item.latency >= 20 && item.latency < 50).length,
-      values.filter((item) => item.latency >= 50 && item.latency < 100).length,
-      values.filter((item) => item.latency >= 100 && item.latency <= 200).length,
-      values.filter((item) => item.latency > 200).length,
+      values.filter((value) => value < 20).length,
+      values.filter((value) => value >= 20 && value < 50).length,
+      values.filter((value) => value >= 50 && value < 100).length,
+      values.filter((value) => value >= 100 && value <= 200).length,
+      values.filter((value) => value > 200).length,
     ]
     return buckets.map((count) => Math.round((count / total) * 100))
-  }, [runtime])
+  }, [network.probes])
 
   const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
     const timestamp = new Date().toLocaleTimeString("en-GB")
@@ -316,7 +316,7 @@ function App() {
       ["Average external endpoint latency (ms)", String(network.latency ?? "unavailable")],
       ["Browser-to-SIGNAL RTT (ms)", String(clientRtt ?? "unavailable")],
       ["Traffic per second", String(network.traffic)],
-      ["Packet loss (%)", String(network.packetLoss)],
+      ["Probe failure rate (%)", String(network.packetLoss ?? "unavailable")],
       ["Nodes", String(network.nodes)],
       ["Connections", String(network.connections)],
       [],
@@ -404,12 +404,12 @@ function App() {
           </p>
           <p>
             <span>Packet Loss</span>
-            <strong className="yellow">{network.packetLoss.toFixed(2)}%</strong>
+            <strong className="yellow">{network.packetLoss === null ? "—" : `${network.packetLoss.toFixed(2)}%`}</strong>
             <em className="yellow">●</em>
           </p>
           <p>
             <span>Avg Latency</span>
-            <strong className="green">{network.latency}ms</strong>
+            <strong className="green">{network.latency === null ? "—" : `${network.latency}ms`}</strong>
             <em className="green">●</em>
           </p>
           <p>
@@ -704,12 +704,12 @@ function App() {
 
             <div className="panel latency-panel">
               <header>
-                <strong>LATENCY DISTRIBUTION</strong>
+                <strong>LIVE ENDPOINT LATENCY</strong>
               </header>
 
               <div className="donut-wrap">
                 <div className="donut" style={{ background: `conic-gradient(#21d8ff 0 ${latencyDistribution[0]}%, #2bdc91 ${latencyDistribution[0]}% ${latencyDistribution[0] + latencyDistribution[1]}%, #ffd21f ${latencyDistribution[0] + latencyDistribution[1]}% ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2]}%, #a96cff ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2]}% ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2] + latencyDistribution[3]}%, #ff3d59 ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2] + latencyDistribution[3]}% 100%)` }}>
-                  <strong>{network.latency}<small>ms</small></strong>
+                  <strong>{network.latency === null ? "—" : network.latency}<small>ms</small></strong>
                 </div>
 
                 <div className="legend">
@@ -719,6 +719,7 @@ function App() {
                   <span><i className="purple-dot" />100-200ms <b>{latencyDistribution[3]}%</b></span>
                   <span><i className="red-dot" />&gt; 200ms <b>{latencyDistribution[4]}%</b></span>
                 </div>
+                <div className="probe-list">{(network.probes ?? []).map((probe) => <div className="probe-row" key={probe.id}><span className={`status-dot ${probe.status === "online" ? "" : "offline"}`} /><span>{probe.name}</span><strong>{probe.latency === null ? "Timeout" : `${probe.latency} ms`}</strong><small>{probe.httpStatus ? `HTTP ${probe.httpStatus}` : probe.status}</small></div>)}</div>
               </div>
             </div>
 
@@ -776,7 +777,7 @@ function App() {
               </>}
               {activePage === "History" && <>
                 <div className="page-heading"><div><span className="eyebrow">TELEMETRY HISTORY</span><h1>Network history</h1><p>Recent traffic samples and status events in this session.</p></div><span className="page-count">{trafficHistory.length} samples</span></div>
-                <div className="history-summary"><article><span>Current traffic</span><strong>{formatTraffic(network.traffic)}</strong></article><article><span>Average latency</span><strong>{network.latency} ms</strong></article><article><span>Packet loss</span><strong>{network.packetLoss.toFixed(2)}%</strong></article></div>
+                <div className="history-summary"><article><span>Current traffic</span><strong>{formatTraffic(network.traffic)}</strong></article><article><span>Live endpoint latency</span><strong>{network.latency === null ? "Measuring…" : `${network.latency} ms`}</strong></article><article><span>Probe failure rate</span><strong>{network.packetLoss === null ? "Measuring…" : `${network.packetLoss.toFixed(2)}%`}</strong></article></div>
                 <div className="page-table"><div className="table-row table-header"><span>Time</span><span>Event</span></div>{eventLog.length ? eventLog.map((item, index) => <div className="table-row history-row" key={`${item.time}-${item.text}-${index}`}><span>{item.time}</span><span>{item.text}</span></div>) : <div className="empty-state">No events recorded yet.</div>}</div>
               </>}
               {activePage === "Reports" && <>
