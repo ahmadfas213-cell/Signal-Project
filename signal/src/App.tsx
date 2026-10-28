@@ -958,11 +958,11 @@ function App() {
                 <div className="page-heading"><div><span className="eyebrow">CUSTOM MONITORING</span><h1>Endpoint monitor</h1><p>Monitor public HTTP(S) endpoints from this browser. Checks repeat every 30 seconds while this page is open.</p></div><span className="page-count">{customEndpoints.length} endpoints</span></div>
                 <form className="endpoint-form" onSubmit={(event) => {
                   event.preventDefault()
-                  const name = endpointName.trim() || new URL(endpointUrl).hostname
                   let parsed: URL
                   try { parsed = new URL(endpointUrl.trim()) } catch { setDiagnostic("Enter a valid endpoint URL"); return }
                   if (!["http:", "https:"].includes(parsed.protocol)) { setDiagnostic("Only HTTP and HTTPS endpoints are supported"); return }
                   if (customEndpoints.some((item) => item.url === parsed.href)) { setDiagnostic("That endpoint is already being monitored"); return }
+                  const name = endpointName.trim() || parsed.hostname
                   setCustomEndpoints((current) => [...current, { id: crypto.randomUUID(), name, url: parsed.href, enabled: true, status: "pending", latency: null, checkedAt: null, error: null }])
                   setEndpointName(""); setEndpointUrl(""); setDiagnostic("Endpoint added. First check is starting.")
                 }}>
