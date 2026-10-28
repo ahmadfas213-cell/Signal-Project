@@ -1919,6 +1919,49 @@ button.table-row:hover {
   padding-left: 16px;
 }
 
+.global-leaflet-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  background: #071018;
+  isolation: isolate;
+}
+
+.global-leaflet-map .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #071018;
+  font-family: inherit;
+}
+
+.global-leaflet-map .leaflet-control-attribution {
+  background: rgba(5, 10, 15, 0.82);
+  color: #8ea2ac;
+  font-size: 9px;
+}
+
+.global-leaflet-map .leaflet-control-attribution a {
+  color: #7adcc0;
+}
+
+.global-leaflet-map .leaflet-bar a,
+.global-leaflet-map .leaflet-bar a:hover {
+  color: #dffbf4;
+  background: #101c25;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.signal-map-popup {
+  color: #13212a;
+  line-height: 1.6;
+}
+
+.signal-map-popup small {
+  color: #53636b;
+}
+
 .global-world-map {
   position: absolute;
   inset: 0;
