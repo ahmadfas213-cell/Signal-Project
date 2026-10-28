@@ -31,6 +31,8 @@ type Runtime = {
 }
 
 type DeviceNetworkInfo = { effectiveType?: string; downlink?: number; rtt?: number; type?: string; saveData?: boolean }
+type GlobalProbe = { id: number; country: string; latitude: number; longitude: number; asn: number | null; status: string }
+type GlobalProbeResponse = { source: string; fetchedAt: string | null; count: number; returned: number; results: GlobalProbe[]; error: string | null; note: string }
 
 type NetworkData = {
   timestamp: string
@@ -125,6 +127,8 @@ function App() {
   const [serverOnline, setServerOnline] = useState(false)
   const [clientRtt, setClientRtt] = useState<number | null>(null)
   const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkInfo | null>(null)
+  const [globalProbeData, setGlobalProbeData] = useState<GlobalProbeResponse | null>(null)
+  const [globalProbeError, setGlobalProbeError] = useState<string | null>(null)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [incidentMode, setIncidentMode] = useState(false)
@@ -144,6 +148,27 @@ function App() {
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(clock)
+  }, [])
+
+  useEffect(() => {
+    const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
+    const socketUrl = configuredUrl || (import.meta.env.DEV ? "ws://localhost:3000" : "")
+    const apiBase = socketUrl ? socketUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/$/, "") : ""
+    if (!apiBase) { setGlobalProbeError("Configure the public SIGNAL backend to load global probe data"); return }
+    let disposed = false
+    const load = async () => {
+      try {
+        const response = await fetch(`${apiBase}/api/global-probes`, { cache: "no-store" })
+        const data = await response.json() as GlobalProbeResponse
+        if (!response.ok) throw new Error(data.error || `Global probe API returned HTTP ${response.status}`)
+        if (!disposed) { setGlobalProbeData(data); setGlobalProbeError(null) }
+      } catch (error) {
+        if (!disposed) setGlobalProbeError(error instanceof Error ? error.message : "Unable to load global probes")
+      }
+    }
+    void load()
+    const refresh = window.setInterval(load, 300000)
+    return () => { disposed = true; window.clearInterval(refresh) }
   }, [])
 
   useEffect(() => {
@@ -386,7 +411,7 @@ function App() {
 
         <div className="menu-section">
           <span>TOPOLOGIES</span>
-          {["Production", "Staging", "Singapore Cluster", "Tokyo Edge", "New York DC"].map((label, index) => (
+          {["Global Internet", "Production", "Staging", "Singapore Cluster", "Tokyo Edge", "New York DC"].map((label, index) => (
             <button className={`menu ${selectedTopology === label ? "active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview"); setEventLog((current) => [{ time: new Date().toLocaleTimeString("en-GB"), tone: "green", text: `Topology switched to ${label}` }, ...current].slice(0, 40)) }}>
               <i>♧</i>
               <b>{label}</b>
@@ -476,7 +501,8 @@ function App() {
           {activePage === "Overview" || activePage === "Map" ? (
           <>
           <div className="main-row">
-            <section className={`network-card ${layers.geographical ? "geographical" : ""}`}>
+            <section className={`network-card ${layers.geographical ? "geographical" : ""} ${selectedTopology === "Global Internet" ? "global-network-card" : ""}`}>
+              {selectedTopology === "Global Internet" && <div className="global-map-status"><span className={`status-dot ${globalProbeData ? "" : "offline"}`} /><strong>GLOBAL INTERNET PROBES</strong><span>{globalProbeData ? `${globalProbeData.returned.toLocaleString()} mapped probes` : globalProbeError || "Loading global probe registry…"}</span><small>Source: RIPE Atlas public probe registry · locations only, no invented links</small></div>}
               <div className="layers">
                 <span>LAYERS</span>
 
@@ -517,7 +543,7 @@ function App() {
                   </filter>
                 </defs>
 
-                {visibleConnections.map(([fromId, toId], index) => {
+                {selectedTopology !== "Global Internet" && visibleConnections.map(([fromId, toId], index) => {
                   const from = nodes.find((n) => n.id === fromId)!
                   const to = nodes.find((n) => n.id === toId)!
                   const x1 = from.x * 10
@@ -562,7 +588,8 @@ function App() {
                 })}
               </svg>
 
-              {layers.nodes && (
+              {selectedTopology === "Global Internet" && layers.nodes && <div className="global-probe-layer" style={{ transform: `scale(${zoom})` }}>{(globalProbeData?.results ?? []).map((probe) => <span key={probe.id} className="global-probe-dot" style={{ left: `${((probe.longitude + 180) / 360) * 100}%`, top: `${((90 - probe.latitude) / 180) * 100}%` }} title={`RIPE Atlas probe #${probe.id} · ${probe.country} · ${probe.asn ? `AS${probe.asn}` : "ASN unavailable"}`}><i /> </span>)}</div>}
+              {selectedTopology !== "Global Internet" && layers.nodes && (
                 <div className="node-layer" style={{ transform: `scale(${zoom})` }}>
                   {nodes.map((node) => {
                     const data = runtime[node.id] ?? initialRuntime.api
@@ -601,7 +628,7 @@ function App() {
               </div>
             </section>
 
-            {detailsOpen ? <aside className="details">
+            {selectedTopology === "Global Internet" ? <aside className="details global-details"><div className="details-head"><strong>Global coverage</strong><em className={globalProbeData ? "online" : "warning"}>{globalProbeData ? "LIVE REGISTRY" : "WAITING"}</em></div><div className="global-stat"><span>Returned probes</span><strong>{globalProbeData?.returned.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Registry total</span><strong>{globalProbeData?.count.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Countries represented</span><strong>{globalProbeData ? new Set(globalProbeData.results.map((probe) => probe.country)).size : "—"}</strong></div><p className="settings-note">Each dot is a real RIPE Atlas public probe location. The map does not draw links between probes because this endpoint does not provide measured routes or pairwise latency. Global probe results refresh every five minutes.</p>{globalProbeData?.fetchedAt && <small className="global-updated">Last refreshed {new Date(globalProbeData.fetchedAt).toLocaleString()}</small>}</aside> : detailsOpen ? <aside className="details">
               <div className="details-head">
                 <span>‹</span>
                 <strong>{selectedNode.name}</strong>
