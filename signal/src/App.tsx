@@ -502,7 +502,7 @@ function App() {
           <>
           <div className="main-row">
             <section className={`network-card ${layers.geographical ? "geographical" : ""} ${selectedTopology === "Global Internet" ? "global-network-card" : ""}`}>
-              {selectedTopology === "Global Internet" && <div className="global-map-status"><span className={`status-dot ${globalProbeData ? "" : "offline"}`} /><strong>GLOBAL INTERNET PROBES</strong><span>{globalProbeData ? `${globalProbeData.returned.toLocaleString()} mapped probes` : globalProbeError || "Loading global probe registry…"}</span><small>Source: RIPE Atlas public probe registry · locations only, no invented links</small></div>}
+              {selectedTopology === "Global Internet" && <div className="global-map-status"><span className={`status-dot ${globalProbeData ? "" : "offline"}`} /><strong>GLOBAL INTERNET PROBES</strong><span>{globalProbeData ? `${globalProbeData.returned.toLocaleString()} mapped probes` : globalProbeError || "Loading global probe registry…"}</span><small>Source: RIPE Atlas public probe registry · sampled active public probes · no invented links</small></div>}
               <div className="layers">
                 <span>LAYERS</span>
 
@@ -526,6 +526,23 @@ function App() {
                 })}
               </div>
 
+              {selectedTopology === "Global Internet" && <svg className="global-world-map" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
+                <g className="world-grid">
+                  <path d="M0 103H1000 M0 207H1000 M0 310H1000 M0 413H1000 M0 517H1000 M166 0V620 M333 0V620 M500 0V620 M666 0V620 M833 0V620" />
+                </g>
+                <g className="world-land">
+                  <path d="M38 118 L65 87 111 72 157 80 186 97 226 105 254 137 270 158 252 180 226 190 216 221 195 231 182 207 163 188 145 172 123 160 98 145 70 143 Z" />
+                  <path d="M253 270 L283 257 315 275 342 301 355 334 346 367 329 399 318 438 299 478 286 448 276 412 265 378 257 341 Z" />
+                  <path d="M321 70 L348 51 378 58 398 78 386 101 365 112 340 100 Z" />
+                  <path d="M447 143 L466 124 488 128 502 144 490 160 469 162 Z" />
+                  <path d="M457 176 L481 165 506 180 520 213 511 246 493 281 477 315 458 300 446 270 438 235 442 204 Z" />
+                  <path d="M497 132 L527 108 570 98 608 107 640 96 687 106 724 125 766 132 806 155 845 177 830 196 790 193 763 213 727 207 699 230 667 222 646 202 615 208 588 190 562 194 538 173 514 166 Z" />
+                  <path d="M526 205 L550 202 568 222 565 246 548 258 534 238 Z" />
+                  <path d="M754 304 L790 294 828 306 849 326 835 348 802 353 775 336 Z" />
+                  <path d="M849 375 L880 366 914 382 925 406 903 426 870 420 850 401 Z" />
+                  <path d="M901 238 L920 228 935 242 927 262 909 265 Z" />
+                </g>
+              </svg>}
               <svg
                 className="network-svg"
                 style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
@@ -628,7 +645,7 @@ function App() {
               </div>
             </section>
 
-            {selectedTopology === "Global Internet" ? <aside className="details global-details"><div className="details-head"><strong>Global coverage</strong><em className={globalProbeData ? "online" : "warning"}>{globalProbeData ? "LIVE REGISTRY" : "WAITING"}</em></div><div className="global-stat"><span>Returned probes</span><strong>{globalProbeData?.returned.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Registry total</span><strong>{globalProbeData?.count.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Countries represented</span><strong>{globalProbeData ? new Set(globalProbeData.results.map((probe) => probe.country)).size : "—"}</strong></div><p className="settings-note">Each dot is a real RIPE Atlas public probe location. The map does not draw links between probes because this endpoint does not provide measured routes or pairwise latency. Global probe results refresh every five minutes.</p>{globalProbeData?.fetchedAt && <small className="global-updated">Last refreshed {new Date(globalProbeData.fetchedAt).toLocaleString()}</small>}</aside> : detailsOpen ? <aside className="details">
+            {selectedTopology === "Global Internet" ? <aside className="details global-details"><div className="details-head"><strong>Global coverage</strong><em className={globalProbeData ? "online" : "warning"}>{globalProbeData ? "LIVE REGISTRY" : "WAITING"}</em></div><div className="global-stat"><span>Returned probes</span><strong>{globalProbeData?.returned.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Registry total</span><strong>{globalProbeData?.count.toLocaleString() ?? "—"}</strong></div><div className="global-stat"><span>Countries represented</span><strong>{globalProbeData ? new Set(globalProbeData.results.map((probe) => probe.country)).size : "—"}</strong></div><p className="settings-note">Each dot is a real RIPE Atlas public probe location. This is a multi-page registry sample, not a guarantee that every country is represented. The registry does not provide pairwise latency or routes here, so links are not invented. Results refresh every five minutes.</p>{globalProbeData?.fetchedAt && <small className="global-updated">Last refreshed {new Date(globalProbeData.fetchedAt).toLocaleString()}</small>}</aside> : detailsOpen ? <aside className="details">
               <div className="details-head">
                 <span>‹</span>
                 <strong>{selectedNode.name}</strong>
