@@ -263,6 +263,50 @@ function App() {
       const map = globalMapInstance.current
       const markerLayer = globalMapMarkers.current
       markerLayer.clearLayers()
+
+      if (layers.connections && globalVisibleProbes.length > 1) {
+        const candidates = globalVisibleProbes
+          .filter((probe) => Number.isFinite(probe.latitude) && Number.isFinite(probe.longitude))
+          .sort((a, b) => a.id - b.id)
+        const routePairs: Array<[number, number]> = [
+          [0, Math.floor(candidates.length * 0.22)],
+          [Math.floor(candidates.length * 0.08), Math.floor(candidates.length * 0.48)],
+          [Math.floor(candidates.length * 0.18), Math.floor(candidates.length * 0.72)],
+          [Math.floor(candidates.length * 0.28), Math.floor(candidates.length * 0.88)],
+          [Math.floor(candidates.length * 0.38), Math.floor(candidates.length * 0.64)],
+          [Math.floor(candidates.length * 0.50), Math.floor(candidates.length * 0.94)],
+          [Math.floor(candidates.length * 0.12), Math.floor(candidates.length * 0.82)],
+          [Math.floor(candidates.length * 0.32), Math.floor(candidates.length * 0.76)],
+          [Math.floor(candidates.length * 0.04), Math.floor(candidates.length * 0.60)],
+          [Math.floor(candidates.length * 0.58), Math.floor(candidates.length * 0.90)],
+          [Math.floor(candidates.length * 0.16), Math.floor(candidates.length * 0.42)],
+          [Math.floor(candidates.length * 0.44), Math.floor(candidates.length * 0.80)],
+        ]
+        for (const [fromIndex, toIndex] of routePairs) {
+          const from = candidates[fromIndex]
+          const to = candidates[toIndex]
+          if (!from || !to || from.id === to.id) continue
+          const longitudeDelta = ((to.longitude - from.longitude + 540) % 360) - 180
+          const latLngs: Array<[number, number]> = []
+          for (let step = 0; step <= 32; step++) {
+            const t = step / 32
+            const bend = Math.sin(Math.PI * t) * Math.min(18, Math.abs(longitudeDelta) * 0.12 + 4) * (from.latitude > to.latitude ? 1 : -1)
+            latLngs.push([
+              from.latitude + (to.latitude - from.latitude) * t + bend,
+              from.longitude + longitudeDelta * t,
+            ])
+          }
+          L.polyline(latLngs, {
+            color: "#38e8b2",
+            weight: 1.6,
+            opacity: 0.72,
+            dashArray: "5 13",
+            className: "signal-animated-route",
+            interactive: false,
+          }).addTo(markerLayer)
+        }
+      }
+
       if (layers.nodes) {
         for (const probe of globalVisibleProbes) {
           const marker = L.circleMarker([probe.latitude, probe.longitude], {
