@@ -453,9 +453,23 @@ button {
 }
 
 .connection-line {
-  stroke: rgba(112, 145, 147, 0.24);
-  stroke-width: 0.22;
+  fill: none;
+  stroke: rgba(112, 145, 147, 0.2);
+  stroke-width: 0.16;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+
+.connection-group {
+  opacity: 0.88;
+}
+
+.connection-group.warning .connection-line {
+  stroke: rgba(244, 211, 94, 0.32);
+}
+
+.connection-group.critical .connection-line {
+  stroke: rgba(255, 95, 103, 0.38);
 }
 
 .connection-group.warning .connection-line {
@@ -468,7 +482,7 @@ button {
 
 .packet {
   fill: #53f6bb;
-  filter: drop-shadow(0 0 4px rgba(83, 246, 187, 0.95));
+  filter: drop-shadow(0 0 2px rgba(83, 246, 187, 0.65));
 }
 
 .connection-group.warning .packet {
