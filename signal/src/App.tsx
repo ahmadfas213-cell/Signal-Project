@@ -340,6 +340,21 @@ function App() {
     return buckets.map((count) => Math.round((count / total) * 100))
   }, [network.probes])
 
+  const liveProbes = network.probes ?? []
+  const onlineProbeCount = liveProbes.filter((probe) => probe.status === "online").length
+  const failedProbeCount = liveProbes.filter((probe) => probe.status !== "online" && probe.status !== "pending").length
+  const healthScore = liveProbes.length
+    ? Math.round((onlineProbeCount / liveProbes.length) * 75 + (clientRtt === null ? 0 : Math.max(0, 25 * (1 - Math.min(clientRtt, 500) / 500))))
+    : null
+  const healthLabel = healthScore === null ? "WAITING FOR DATA" : healthScore >= 90 ? "HEALTHY" : healthScore >= 70 ? "DEGRADED" : "NEEDS ATTENTION"
+  const healthAdvice = healthScore === null
+    ? "Waiting for live endpoint probes from the backend."
+    : failedProbeCount > 0
+      ? `${failedProbeCount} endpoint probe(s) are failing. Check the endpoint status and retry after a short interval.`
+      : clientRtt !== null && clientRtt >= 150
+        ? "Browser-to-server latency is elevated. Check the hosting region and your current connection."
+        : "Live endpoint probes are responding. Keep monitoring latency for sudden changes."
+
   const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
     const timestamp = new Date().toLocaleTimeString("en-GB")
     const result = tool === "Ping"
@@ -751,6 +766,35 @@ function App() {
               )}
             </aside> : <button className="show-details" onClick={() => setDetailsOpen(true)}>Show node details</button>}
           </div>
+
+          <section className="insights-grid" aria-label="Smart network insights">
+            <article className="panel health-insight">
+              <header>
+                <div><span className="eyebrow">LIVE TELEMETRY</span><strong>NETWORK HEALTH</strong></div>
+                <span className={healthScore === null ? "insight-status pending" : healthScore >= 90 ? "insight-status good" : healthScore >= 70 ? "insight-status warn" : "insight-status bad"}>{healthLabel}</span>
+              </header>
+              <div className="health-score-row">
+                <div className="health-score">{healthScore === null ? "—" : healthScore}<small>{healthScore === null ? "" : "/100"}</small></div>
+                <div className="health-meter"><i style={{ width: `${healthScore ?? 0}%` }} /></div>
+              </div>
+              <p>{healthAdvice}</p>
+              <div className="insight-stats">
+                <div><span>Endpoints online</span><strong>{liveProbes.length ? `${onlineProbeCount}/${liveProbes.length}` : "—"}</strong></div>
+                <div><span>Browser RTT</span><strong>{clientRtt === null ? "—" : `${clientRtt} ms`}</strong></div>
+                <div><span>Last probe cycle</span><strong>{network.probes?.find((probe) => probe.checkedAt)?.checkedAt ? new Date(network.probes.find((probe) => probe.checkedAt)!.checkedAt!).toLocaleTimeString("en-GB") : "Waiting"}</strong></div>
+              </div>
+            </article>
+            <article className="panel quick-actions">
+              <header><div><span className="eyebrow">ONE-CLICK TOOLS</span><strong>QUICK DIAGNOSTICS</strong></div><span className="quick-icon">⌁</span></header>
+              <p>Run a quick check or export the current telemetry snapshot without digging through menus.</p>
+              <div className="quick-action-buttons">
+                <button onClick={() => runDiagnostic("Ping")}>Run RTT check</button>
+                <button onClick={() => runDiagnostic("Packet Monitor")}>Inspect node</button>
+                <button onClick={exportReport}>Export CSV</button>
+              </div>
+              <small>RTT is measured from this browser. Topology node metrics remain demo data.</small>
+            </article>
+          </section>
 
           <section className="bottom-grid">
             <div className="panel traffic-panel">
