@@ -454,10 +454,14 @@ button {
 
 .connection-line {
   fill: none;
-  stroke: rgba(112, 145, 147, 0.2);
-  stroke-width: 0.16;
+  stroke: rgba(102, 153, 166, 0.48);
+  stroke-width: 0.24;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+
+.connection-group .connection-line {
+  filter: drop-shadow(0 0 1px rgba(72, 190, 207, 0.14));
 }
 
 .connection-group {
