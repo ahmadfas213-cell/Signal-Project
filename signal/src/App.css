@@ -1619,3 +1619,25 @@ button {
 .export.danger { border-color:rgba(255,92,110,.4); color:#ff7e8a; }
 .incident-card .export { flex-shrink:0; }
 @media (max-width:650px) { .ops-grid { grid-template-columns:1fr; } .incident-card { flex-wrap:wrap; } }
+
+.reliability-toolbar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; margin:18px 0; }
+.reliability-toolbar label { display:flex; flex-direction:column; gap:7px; color:var(--muted,#829199); font-size:10px; }
+.reliability-toolbar select { min-width:190px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; color:var(--text,#dce5e8); background:rgba(0,0,0,.18); }
+.reliability-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+.reliability-card { min-width:0; padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.025); }
+.reliability-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.reliability-card header div { min-width:0; display:flex; flex-direction:column; gap:5px; }
+.reliability-card header strong { font-size:13px; }
+.reliability-card header small,.reliability-card>small { color:var(--muted,#829199); font-size:9px; overflow-wrap:anywhere; line-height:1.5; }
+.reliability-main { display:flex; flex-direction:column; gap:4px; margin:22px 0 16px; }
+.reliability-main strong { color:var(--cyan,#20d8ff); font-size:30px; letter-spacing:-1px; }
+.reliability-main span,.reliability-metrics span { color:var(--muted,#829199); font-size:10px; }
+.reliability-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px 8px; }
+.reliability-metrics div { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.reliability-metrics strong { font-size:12px; overflow-wrap:anywhere; }
+.reliability-strip { display:flex; gap:3px; height:24px; margin:18px 0 10px; overflow:hidden; }
+.reliability-strip span { flex:1; min-width:2px; border-radius:2px; background:#6f7b83; }
+.reliability-strip .online { background:#48d6a0; }
+.reliability-strip .failed { background:#ff647c; }
+.reliability-strip .blocked { background:#e8b85c; }
+@media(max-width:700px) { .reliability-grid { grid-template-columns:1fr; } }
