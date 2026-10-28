@@ -38,7 +38,7 @@ jobs:
       - name: Build
         working-directory: signal
         env:
-          VITE_SIGNAL_WS_URL: ${{ vars.VITE_SIGNAL_WS_URL }}
+          VITE_SIGNAL_WS_URL: wss://signal-core.enzonic.dev
         run: npm run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
