@@ -122,6 +122,8 @@ function App() {
   const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports" | "Endpoints">("Overview")
   const [selectedTopology, setSelectedTopology] = useState("Production")
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState("")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [diagnostic, setDiagnostic] = useState("No diagnostic running")
@@ -170,6 +172,22 @@ function App() {
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(clock)
+  }, [])
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setCommandPaletteOpen((open) => !open)
+        setCommandQuery("")
+      }
+      if (event.key === "Escape") {
+        setCommandPaletteOpen(false)
+        setCommandQuery("")
+      }
+    }
+    window.addEventListener("keydown", handleShortcut)
+    return () => window.removeEventListener("keydown", handleShortcut)
   }, [])
 
   useEffect(() => {
@@ -496,6 +514,25 @@ function App() {
     link.click()
     URL.revokeObjectURL(url)
   }
+
+
+  const commandItems = [
+    ...(["Overview", "Nodes", "Map", "Incidents", "History", "Reports", "Endpoints"] as const).map((page) => ({
+      label: `Open ${page}`,
+      detail: "Navigate",
+      keywords: page.toLowerCase(),
+      run: () => setActivePage(page),
+    })),
+    { label: "Run RTT check", detail: "Diagnostics", keywords: "ping latency rtt", run: () => { void runDiagnostic("Ping") } },
+    { label: "Run traceroute", detail: "Diagnostics", keywords: "trace route hops", run: () => { void runDiagnostic("Traceroute") } },
+    { label: "Run packet monitor", detail: "Diagnostics", keywords: "packet inspect node", run: () => { void runDiagnostic("Packet Monitor") } },
+    { label: "Run performance test", detail: "Diagnostics", keywords: "benchmark speed performance", run: () => { void runDiagnostic("Performance Test") } },
+    { label: "Export CSV report", detail: "Reports", keywords: "download export csv", run: exportReport },
+    { label: "Open settings", detail: "Preferences", keywords: "settings thresholds notifications", run: () => setSettingsOpen(true) },
+    { label: "Toggle incident mode", detail: "View", keywords: "incident highlight focus", run: () => setIncidentMode((value) => !value) },
+    { label: "Pause / resume telemetry", detail: "Realtime", keywords: "pause play stream", run: () => setPaused((value) => !value) },
+  ]
+  const filteredCommands = commandItems.filter((command) => `${command.label} ${command.detail} ${command.keywords}`.toLowerCase().includes(commandQuery.trim().toLowerCase()))
 
   return (
     <main className={`signal ${incidentMode ? "incident-mode" : ""}`}>
@@ -1023,6 +1060,17 @@ function App() {
               </>}
             </section>
           )}
+
+          {commandPaletteOpen && <div className="command-backdrop" role="presentation" onClick={() => setCommandPaletteOpen(false)}>
+            <section className="command-dialog" role="dialog" aria-modal="true" aria-label="Command palette" onClick={(event) => event.stopPropagation()}>
+              <div className="command-search"><span>⌕</span><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search pages, diagnostics, actions…" aria-label="Search commands" /><kbd>ESC</kbd></div>
+              <div className="command-list">
+                {filteredCommands.map((command) => <button key={command.label} className="command-item" onClick={() => { command.run(); setCommandPaletteOpen(false); setCommandQuery("") }}><span><strong>{command.label}</strong><small>{command.detail}</small></span><kbd>↵</kbd></button>)}
+                {!filteredCommands.length && <div className="command-empty">No matching commands. Even the command palette has limits.</div>}
+              </div>
+              <footer><span><kbd>CTRL</kbd> + <kbd>K</kbd> to toggle</span><span>{filteredCommands.length} commands</span></footer>
+            </section>
+          </div>}
           {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Latency alert threshold (ms)</span><input className="settings-number" type="number" min={1} max={5000} value={latencyThreshold} onChange={(event) => setLatencyThreshold(Math.max(1, Math.min(5000, Number(event.target.value) || 1)))} /></div><div className="settings-row"><span>Probe failure threshold (%)</span><input className="settings-number" type="number" min={0} max={100} step={0.5} value={lossThreshold} onChange={(event) => setLossThreshold(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /></div><div className="settings-row"><span>Desktop notifications</span><button onClick={async () => { if (!("Notification" in window)) { setDiagnostic("This browser does not support desktop notifications"); return } const permission = await Notification.requestPermission(); setNotificationsEnabled(permission === "granted"); setDiagnostic(permission === "granted" ? "Desktop alerts enabled" : "Desktop notification permission not granted") }}>{notificationsEnabled ? "Enabled" : "Enable alerts"}</button></div><div className="settings-row"><span>Persistent history</span><button onClick={() => { setHistorySamples([]); localStorage.removeItem("signal-history-v1"); setDiagnostic("Local history cleared") }}>Clear history</button></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">Custom endpoint checks run in this browser and may be blocked by CORS. Threshold alerts are generated when live measurements cross your configured limits. History and endpoint settings are stored locally in this browser. External endpoint latency and probe loss are measured live by HTTP requests from the backend. Client RTT is measured from this browser to the SIGNAL server. Traffic and per-node topology telemetry remain simulated. Browsers cannot expose Wi-Fi/cellular signal strength in dBm, so this dashboard does not invent a signal-strength reading.</p></section></div>}
         </div>
       </section>
