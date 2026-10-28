@@ -114,29 +114,49 @@ async function refreshGlobalProbes() {
   if (globalProbeBusy || Date.now() - globalProbeCache.fetchedAt < 300000) return
   globalProbeBusy = true
   try {
-    const response = await fetch("https://atlas.ripe.net/api/v2/probes/?status=1&is_public=true&limit=500", {
-      headers: { accept: "application/json", "user-agent": "SIGNAL-Global-Network-Map/1.0" },
-      signal: AbortSignal.timeout(12000),
-    })
-    if (!response.ok) throw new Error(`RIPE Atlas returned HTTP ${response.status}`)
-    const payload = await response.json()
-    const results = (payload.results || []).map((probe) => {
-      const coordinates = probe.geometry?.coordinates
-      if (!Array.isArray(coordinates) || coordinates.length < 2) return null
-      const longitude = Number(coordinates[0])
-      const latitude = Number(coordinates[1])
-      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null
-      return {
-        id: probe.id,
-        country: probe.country_code || "Unknown",
-        latitude,
-        longitude,
-        asn: probe.asn_v4 || probe.asn_v6 || null,
-        status: probe.status?.name || "Connected",
-        statusSince: probe.status_since || null,
+    const pageSize = 500
+    const pagesToLoad = 8
+    const pageRequests = await Promise.allSettled(Array.from({ length: pagesToLoad }, async (_, index) => {
+      const page = index + 1
+      const response = await fetch(`https://atlas.ripe.net/api/v2/probes/?status=1&is_public=true&limit=${pageSize}&page=${page}`, {
+        headers: { accept: "application/json", "user-agent": "SIGNAL-Global-Network-Map/1.1" },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!response.ok) throw new Error(`RIPE Atlas page ${page} returned HTTP ${response.status}`)
+      return response.json()
+    }))
+    const payloads = pageRequests.filter((item) => item.status === "fulfilled").map((item) => item.value)
+    if (!payloads.length) {
+      const failed = pageRequests.find((item) => item.status === "rejected")
+      throw failed?.reason || new Error("RIPE Atlas returned no probe pages")
+    }
+    const unique = new Map()
+    for (const payload of payloads) {
+      for (const probe of payload.results || []) {
+        const coordinates = probe.geometry?.coordinates
+        if (!Array.isArray(coordinates) || coordinates.length < 2) continue
+        const longitude = Number(coordinates[0])
+        const latitude = Number(coordinates[1])
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude) || longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) continue
+        unique.set(probe.id, {
+          id: probe.id,
+          country: probe.country_code || "Unknown",
+          latitude,
+          longitude,
+          asn: probe.asn_v4 || probe.asn_v6 || null,
+          status: probe.status?.name || "Connected",
+          statusSince: probe.status_since || null,
+        })
       }
-    }).filter(Boolean)
-    globalProbeCache = { fetchedAt: Date.now(), results, count: Number(payload.count || results.length), error: null }
+    }
+    const results = [...unique.values()]
+    const registryCount = Math.max(...payloads.map((payload) => Number(payload.count || 0)), results.length)
+    globalProbeCache = {
+      fetchedAt: Date.now(),
+      results,
+      count: registryCount,
+      error: pageRequests.some((item) => item.status === "rejected") ? "Some registry pages could not be loaded; showing available results." : null,
+    }
   } catch (error) {
     globalProbeCache = { ...globalProbeCache, error: error instanceof Error ? error.message : "Global probe data unavailable" }
   } finally {
