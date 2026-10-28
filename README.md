@@ -101,7 +101,8 @@ Free hosting may sleep when idle, so the first request after inactivity can take
 - [ ] Add historical persistence instead of session-only charts.
 - [ ] Add alert thresholds, incident acknowledgement, and configurable probe targets.
 - [x] Add country filtering to the global probe map.
-- [ ] Add clickable probe detail views and ASN filtering.
+- [x] Add clickable probe detail views with coordinates, country, ASN, and registry status.
+- [ ] Add ASN filtering and latency overlays from actual public measurement results.
 - [ ] Add automated tests for API responses, telemetry calculations, and UI states.
 - [ ] Review dependency audit findings and establish a regular security update process.
 
