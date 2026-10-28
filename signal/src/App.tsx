@@ -798,21 +798,21 @@ function App() {
               {selectedTopology === "Global Internet" && <div className="global-leaflet-map" ref={globalMapElement} aria-label="Interactive geographic map of RIPE Atlas probes" />}
               {selectedTopology === "Global Internet" && selectedGlobalProbe && <div className="global-probe-detail"><div><span className="eyebrow">RIPE ATLAS PROBE</span><button type="button" onClick={() => setSelectedGlobalProbe(null)} aria-label="Close probe details">×</button></div><strong>Probe #{selectedGlobalProbe.id}</strong><dl><dt>Country</dt><dd>{selectedGlobalProbe.country}</dd><dt>ASN</dt><dd>{selectedGlobalProbe.asn ? `AS${selectedGlobalProbe.asn}` : "Not reported"}</dd><dt>Latitude</dt><dd>{selectedGlobalProbe.latitude.toFixed(4)}°</dd><dt>Longitude</dt><dd>{selectedGlobalProbe.longitude.toFixed(4)}°</dd><dt>Registry status</dt><dd>{selectedGlobalProbe.status}</dd></dl><small>Registry metadata only. This view has no latency measurement for this probe.</small></div>}
               {selectedTopology !== "Global Internet" && (layers.connections || layers.packets) && (
-                <svg className="connection-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <svg className="connection-layer" viewBox="0 0 166.67 100" preserveAspectRatio="none" aria-hidden="true">
                   {topologyConnections.map(([fromId, toId], index) => {
                     const from = nodes.find((node) => node.id === fromId)
                     const to = nodes.find((node) => node.id === toId)
                     if (!from || !to) return null
-                    const path = `M ${from.x} ${from.y} L ${to.x} ${to.y}`
+                    const x1 = from.x * 1.6667
+                    const x2 = to.x * 1.6667
+                    const bend = ((index % 3) - 1) * 4
+                    const path = `M ${x1} ${from.y} Q ${(x1 + x2) / 2} ${(from.y + to.y) / 2 + bend} ${x2} ${to.y}`
                     const status = (runtime[toId] ?? initialRuntime[toId]).status
                     return (
                       <g className={`connection-group ${status === "warning" ? "warning" : status === "critical" ? "critical" : ""}`} key={fromId + "-" + toId}>
                         {layers.connections && <path d={path} className="connection-line" />}
-                        {layers.packets && layers.traffic && !paused && <circle r="0.48" className="packet">
-                          <animateMotion path={path} dur={`${(3.2 + (index % 4) * 0.8) / speed}s`} repeatCount="indefinite" begin={`${index * -0.47}s`} />
-                        </circle>}
-                        {layers.packets && layers.traffic && !paused && <circle r="0.28" className="packet packet-secondary">
-                          <animateMotion path={path} dur={`${(4.8 + (index % 3) * 0.7) / speed}s`} repeatCount="indefinite" begin={`${index * -0.83 - 1}s`} />
+                        {layers.packets && layers.traffic && !paused && <circle r="0.34" className="packet">
+                          <animateMotion path={path} dur={`${(5.8 + (index % 4) * 1.1) / speed}s`} repeatCount="indefinite" begin={`${index * -1.1}s`} />
                         </circle>}
                       </g>
                     )
