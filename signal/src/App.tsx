@@ -426,17 +426,39 @@ function App() {
         ? "Browser-to-server latency is elevated. Check the hosting region and your current connection."
         : "Live endpoint probes are responding. Keep monitoring latency for sudden changes."
 
-  const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
+  const runDiagnostic = async (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
     const timestamp = new Date().toLocaleTimeString("en-GB")
+    if (tool === "Traceroute") {
+      const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
+      const socketUrl = configuredUrl || (import.meta.env.DEV ? "ws://localhost:3000" : "")
+      const apiBase = socketUrl ? socketUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/$/, "") : ""
+      if (!apiBase) {
+        const message = "Real traceroute requires the public SIGNAL backend to be configured."
+        setDiagnostic(message)
+        setEventLog((current) => [{ time: timestamp, tone: "yellow", text: message }, ...current].slice(0, 100))
+        setTab("Logs")
+        return
+      }
+      setDiagnostic("Running real system traceroute to cloudflare.com…")
+      try {
+        const response = await fetch(`${apiBase}/api/diagnostics/traceroute?host=cloudflare.com`, { cache: "no-store" })
+        const data = await response.json() as { host?: string; command?: string; output?: string; error?: string; note?: string }
+        const result = response.ok ? `Traceroute to ${data.host} via ${data.command}:\n${data.output}\n${data.note ?? ""}` : `Traceroute unavailable: ${data.error ?? "Request failed"}\n${data.note ?? ""}`
+        setDiagnostic(result)
+        setEventLog((current) => [{ time: new Date().toLocaleTimeString("en-GB"), tone: response.ok ? "green" : "yellow", text: result.slice(0, 500) }, ...current].slice(0, 100))
+      } catch (error) {
+        setDiagnostic(error instanceof Error ? error.message : "Traceroute request failed")
+      }
+      setTab("Logs")
+      return
+    }
     const result = tool === "Ping"
       ? `Live client-to-server RTT: ${clientRtt === null ? "measuring…" : `${clientRtt}ms`}; external endpoint latency: ${network.latency ?? "measuring…"}ms`
-      : tool === "Traceroute"
-        ? `Demo route: Client → Router → ${selectedNode.name}`
-        : tool === "Packet Monitor"
-          ? `Packet monitor started for ${selectedNode.name}`
-          : `Demo performance test: ${formatTraffic(network.traffic)}, ${selected.latency}ms latency`
+      : tool === "Packet Monitor"
+        ? `Packet monitor started for ${selectedNode.name}`
+        : `Demo performance test: ${formatTraffic(network.traffic)}, ${selected.latency}ms latency`
     setDiagnostic(result)
-    setEventLog((current) => [{ time: timestamp, tone: "green", text: result }, ...current].slice(0, 40))
+    setEventLog((current) => [{ time: timestamp, tone: "green", text: result }, ...current].slice(0, 100))
     setTab("Logs")
   }
 
@@ -997,7 +1019,7 @@ function App() {
               {activePage === "Reports" && <>
                 <div className="page-heading"><div><span className="eyebrow">EXPORT CENTER</span><h1>Reports</h1><p>Export telemetry, node metrics, alerts, and event history.</p></div></div>
                 <div className="report-card"><div><span className="eyebrow">SIGNAL NETWORK REPORT</span><h2>{selectedTopology} snapshot</h2><p>Generated from the data currently available in this dashboard.</p><div className="history-summary"><article><span>Nodes</span><strong>{network.nodes}</strong></article><article><span>Connections</span><strong>{network.connections}</strong></article><article><span>Events</span><strong>{eventLog.length}</strong></article></div></div><button className="export" onClick={exportReport}>⇩ Export CSV report</button></div>
-                <div className="diagnostic-card"><strong>Latest diagnostic</strong><p>{diagnostic}</p><small>Diagnostics are simulated and do not send packets over the public internet.</small></div>
+                <div className="diagnostic-card"><strong>Latest diagnostic</strong><p>{diagnostic}</p><small>Traceroute uses the hosting node system utility when available. Packet monitor and performance test remain illustrative; browser RTT and external endpoint probes are measured live.</small></div>
               </>}
             </section>
           )}
