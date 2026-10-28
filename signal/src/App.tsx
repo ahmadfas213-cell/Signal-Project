@@ -110,6 +110,12 @@ function App() {
   })
   const [runtime, setRuntime] = useState<Record<string, Runtime>>(initialRuntime)
   const [selectedId, setSelectedId] = useState("api")
+  const [activePage, setActivePage] = useState<"Overview" | "Nodes" | "Map" | "Incidents" | "History" | "Reports">("Overview")
+  const [selectedTopology, setSelectedTopology] = useState("Production")
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(true)
+  const [diagnostic, setDiagnostic] = useState("No diagnostic running")
   const [tab, setTab] = useState<"Overview" | "Metrics" | "Logs" | "Alerts">("Overview")
   const [serverOnline, setServerOnline] = useState(false)
   const [paused, setPaused] = useState(false)
@@ -259,9 +265,51 @@ function App() {
 
   const time = now.toLocaleTimeString("en-GB")
 
+  const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
+    const timestamp = new Date().toLocaleTimeString("en-GB")
+    const result = tool === "Ping"
+      ? `Demo ping to ${selectedNode.name}: ${selected.latency}ms, simulated loss 0%`
+      : tool === "Traceroute"
+        ? `Demo route: Client → Router → ${selectedNode.name}`
+        : tool === "Packet Monitor"
+          ? `Packet monitor started for ${selectedNode.name}`
+          : `Demo performance test: ${formatTraffic(network.traffic)}, ${selected.latency}ms latency`
+    setDiagnostic(result)
+    setEventLog((current) => [{ time: timestamp, tone: "green", text: result }, ...current].slice(0, 40))
+    setTab("Logs")
+  }
+
+  const exportReport = () => {
+    const rows = [
+      ["Generated at", new Date().toISOString()],
+      ["Topology", selectedTopology],
+      ["Average latency (ms)", String(network.latency)],
+      ["Traffic per second", String(network.traffic)],
+      ["Packet loss (%)", String(network.packetLoss)],
+      ["Nodes", String(network.nodes)],
+      ["Connections", String(network.connections)],
+      [],
+      ["Node", "Location", "Status", "Latency (ms)", "Packet loss (%)", "Uptime (%)"],
+      ...nodes.map((node) => { const item = runtime[node.id] ?? initialRuntime[node.id]; return [node.name, node.location, item.status, String(item.latency), String(item.packetLoss), String(item.uptime)] }),
+      [],
+      ["Events"],
+      ...eventLog.map((item) => [item.time, item.text]),
+      [],
+      ["Alerts"],
+      ...alerts.map((item) => [item.time, item.tone, item.text]),
+    ]
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n")
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `signal-report-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main className={`signal ${incidentMode ? "incident-mode" : ""}`}>
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="logo">
           <span className="logo-wave">〰</span>
           <strong>SIGNAL</strong>
@@ -277,7 +325,7 @@ function App() {
             ["□", "History"],
             ["▤", "Reports"],
           ].map(([ico, label], index) => (
-            <button className={`menu ${index === 0 ? "active" : ""}`} key={label}>
+            <button className={`menu ${activePage === label ? "active" : ""}`} key={label} onClick={() => setActivePage(label as typeof activePage)}>
               <i>{ico}</i>
               <b>{label}</b>
             </button>
@@ -287,7 +335,7 @@ function App() {
         <div className="menu-section">
           <span>TOPOLOGIES</span>
           {["Production", "Staging", "Singapore Cluster", "Tokyo Edge", "New York DC"].map((label, index) => (
-            <button className={`menu ${index === 0 ? "topology-active" : ""}`} key={label}>
+            <button className={`menu ${selectedTopology === label ? "topology-active" : ""}`} key={label} onClick={() => { setSelectedTopology(label); setActivePage("Overview") }}>
               <i>♧</i>
               <b>{label}</b>
               {index === 0 && <em />}
@@ -298,7 +346,7 @@ function App() {
         <div className="menu-section">
           <span>TOOLS</span>
           {["Ping", "Traceroute", "Packet Monitor", "Performance Test"].map((label) => (
-            <button className="menu" key={label}>
+            <button className="menu" key={label} onClick={() => runDiagnostic(label as "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test")}>
               <i>⌁</i>
               <b>{label}</b>
             </button>
@@ -335,14 +383,14 @@ function App() {
           </p>
         </div>
 
-        <button className="collapse">›</button>
+        <button className="collapse" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? "›" : "‹"}</button>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
             <span>‹</span>
-            <strong>Network Overview</strong>
+            <strong>{activePage === "Map" ? "Network Map" : activePage === "Overview" ? "Network Overview" : activePage}</strong>
             <span>⌄</span>
           </div>
 
@@ -363,13 +411,15 @@ function App() {
             >
               ◉ Incident Mode
             </button>
-            <button className="settings">⚙</button>
+            <button className="settings" onClick={() => setSettingsOpen(true)} aria-label="Open settings">⚙</button>
           </div>
         </header>
 
         <div className="content">
+          {activePage === "Overview" || activePage === "Map" ? (
+          <>
           <div className="main-row">
-            <section className="network-card">
+            <section className={`network-card ${layers.geographical ? "geographical" : ""}`}>
               <div className="layers">
                 <span>LAYERS</span>
 
@@ -427,13 +477,13 @@ function App() {
 
                   return (
                     <g key={`${fromId}-${toId}`} className={warning ? "connection warning" : purple ? "connection purple" : "connection"}>
-                      <path d={path} className="connection-shadow" />
+                      {layers.traffic && <path d={path} className="connection-shadow" />}
                       <path d={path} className="connection-line" />
                       {layers.packets && (
                         <>
                           <circle r="4" className="packet packet-glow">
                             <animateMotion
-                              dur={`${1.8 + (index % 4) * 0.35}s`}
+                              dur={`${(1.8 + (index % 4) * 0.35) / speed}s`}
                               repeatCount="indefinite"
                               path={path}
                               rotate="auto"
@@ -441,7 +491,7 @@ function App() {
                           </circle>
                           <circle r="2.1" className="packet">
                             <animateMotion
-                              dur={`${1.8 + (index % 4) * 0.35}s`}
+                              dur={`${(1.8 + (index % 4) * 0.35) / speed}s`}
                               repeatCount="indefinite"
                               path={path}
                               rotate="auto"
@@ -493,12 +543,12 @@ function App() {
               </div>
             </section>
 
-            <aside className="details">
+            {detailsOpen ? <aside className="details">
               <div className="details-head">
                 <span>‹</span>
                 <strong>{selectedNode.name}</strong>
                 <em className={selected.status}>{selected.status === "online" ? "ONLINE" : selected.status.toUpperCase()}</em>
-                <button>×</button>
+                <button onClick={() => setDetailsOpen(false)} aria-label="Close node details">×</button>
               </div>
 
               <div className="tabs">
@@ -591,14 +641,14 @@ function App() {
                   ))}
                 </div>
               )}
-            </aside>
+            </aside> : <button className="show-details" onClick={() => setDetailsOpen(true)}>Show node details</button>}
           </div>
 
           <section className="bottom-grid">
             <div className="panel traffic-panel">
               <header>
                 <strong>TRAFFIC OVER TIME</strong>
-                <span>2.0k/s</span>
+                <span>{formatTraffic(network.traffic)}</span>
               </header>
 
               <div className="chart">
@@ -677,9 +727,33 @@ function App() {
                 <div><span className="blue-badge">i</span><b>High traffic</b><small>12:43:22</small></div>
               </div>
 
-              <button className="export">⇩ Export Report</button>
+              <button className="export" onClick={exportReport}>⇩ Export Report</button>
             </div>
           </section>
+          </>
+          ) : (
+            <section className="page-view">
+              {activePage === "Nodes" && <>
+                <div className="page-heading"><div><span className="eyebrow">TOPOLOGY INVENTORY</span><h1>Network nodes</h1><p>Node status and performance for {selectedTopology}.</p></div><span className="page-count">{nodes.length} nodes</span></div>
+                <div className="page-table"><div className="table-row table-header"><span>Node</span><span>Location</span><span>Status</span><span>Latency</span><span>Packet loss</span><span>Uptime</span></div>{nodes.map((node) => { const item = runtime[node.id] ?? initialRuntime[node.id]; return <button className="table-row" key={node.id} onClick={() => { setSelectedId(node.id); setActivePage("Overview"); setDetailsOpen(true) }}><span><i className={`legend-dot ${item.status === "online" ? "" : item.status}`} />{node.name}</span><span>{node.location}</span><span className={item.status}>{item.status.toUpperCase()}</span><span>{item.latency} ms</span><span>{item.packetLoss.toFixed(2)}%</span><span>{item.uptime.toFixed(2)}%</span></button>})}</div>
+              </>}
+              {activePage === "Incidents" && <>
+                <div className="page-heading"><div><span className="eyebrow">INCIDENT CENTER</span><h1>Incidents and alerts</h1><p>Alerts are recorded when a node changes status.</p></div><span className="page-count">{alerts.length} alerts</span></div>
+                <div className="incident-list">{alerts.length ? alerts.map((item, index) => <article className={`incident-card ${item.tone}`} key={`${item.time}-${item.text}-${index}`}><i className={`legend-dot ${item.tone === "yellow" ? "warning" : item.tone}`} /><div><strong>{item.text}</strong><small>{item.time}</small></div></article>) : <div className="empty-state">No incidents recorded yet. Status changes will appear here.</div>}</div>
+              </>}
+              {activePage === "History" && <>
+                <div className="page-heading"><div><span className="eyebrow">TELEMETRY HISTORY</span><h1>Network history</h1><p>Recent traffic samples and status events in this session.</p></div><span className="page-count">{trafficHistory.length} samples</span></div>
+                <div className="history-summary"><article><span>Current traffic</span><strong>{formatTraffic(network.traffic)}</strong></article><article><span>Average latency</span><strong>{network.latency} ms</strong></article><article><span>Packet loss</span><strong>{network.packetLoss.toFixed(2)}%</strong></article></div>
+                <div className="page-table"><div className="table-row table-header"><span>Time</span><span>Event</span></div>{eventLog.length ? eventLog.map((item, index) => <div className="table-row history-row" key={`${item.time}-${item.text}-${index}`}><span>{item.time}</span><span>{item.text}</span></div>) : <div className="empty-state">No events recorded yet.</div>}</div>
+              </>}
+              {activePage === "Reports" && <>
+                <div className="page-heading"><div><span className="eyebrow">EXPORT CENTER</span><h1>Reports</h1><p>Export telemetry, node metrics, alerts, and event history.</p></div></div>
+                <div className="report-card"><div><span className="eyebrow">SIGNAL NETWORK REPORT</span><h2>{selectedTopology} snapshot</h2><p>Generated from the data currently available in this dashboard.</p><div className="history-summary"><article><span>Nodes</span><strong>{network.nodes}</strong></article><article><span>Connections</span><strong>{network.connections}</strong></article><article><span>Events</span><strong>{eventLog.length}</strong></article></div></div><button className="export" onClick={exportReport}>⇩ Export CSV report</button></div>
+                <div className="diagnostic-card"><strong>Latest diagnostic</strong><p>{diagnostic}</p><small>Diagnostics are simulated and do not send packets over the public internet.</small></div>
+              </>}
+            </section>
+          )}
+          {settingsOpen && <div className="settings-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">Signal settings</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button></header><div className="settings-row"><span>Telemetry connection</span><strong className={serverOnline ? "green" : "yellow"}>{serverOnline ? "Connected" : "Disconnected"}</strong></div><div className="settings-row"><span>WebSocket endpoint</span><code>{import.meta.env.VITE_SIGNAL_WS_URL || (import.meta.env.DEV ? "ws://localhost:3000" : "Not configured")}</code></div><div className="settings-row"><span>Packet animation speed</span><button onClick={() => setSpeed((value) => value === 1 ? 2 : 1)}>{speed}x · Change</button></div><div className="settings-row"><span>Incident highlighting</span><button onClick={() => setIncidentMode((value) => !value)}>{incidentMode ? "Enabled" : "Disabled"}</button></div><p className="settings-note">The backend currently generates simulated telemetry. A public WebSocket endpoint is required for live data on the deployed site.</p></section></div>}
         </div>
       </section>
     </main>
