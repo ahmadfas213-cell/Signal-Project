@@ -1814,3 +1814,46 @@ button.table-row:hover {
     display: none;
   }
 }
+
+
+.browser-link {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(32, 216, 255, 0.035);
+}
+
+.browser-link > div {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.browser-link span,
+.browser-link small {
+  color: #728087;
+  font-size: 8px;
+}
+
+.browser-link strong,
+.browser-link b {
+  color: var(--cyan);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.browser-link > small {
+  grid-column: 1 / -1;
+  line-height: 1.5;
+}
+
+@media (max-width: 500px) {
+  .browser-link {
+    grid-template-columns: 1fr;
+  }
+}
