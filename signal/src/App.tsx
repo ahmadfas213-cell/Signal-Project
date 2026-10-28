@@ -460,6 +460,7 @@ function App() {
 
               <svg
                 className="network-svg"
+                style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
                 viewBox="0 0 1000 620"
                 preserveAspectRatio="none"
                 aria-hidden="true"
@@ -610,9 +611,9 @@ function App() {
 
                   <small>ACTIONS</small>
                   <div className="actions">
-                    <button>Ping</button>
-                    <button>Traceroute</button>
-                    <button>More⌄</button>
+                    <button onClick={() => runDiagnostic("Ping")}>Ping</button>
+                    <button onClick={() => runDiagnostic("Traceroute")}>Traceroute</button>
+                    <button onClick={() => setSettingsOpen(true)}>More⌄</button>
                   </div>
                 </div>
               )}
@@ -686,7 +687,7 @@ function App() {
               </header>
 
               <div className="donut-wrap">
-                <div className="donut">
+                <div className="donut" style={{ background: `conic-gradient(#21d8ff 0 ${latencyDistribution[0]}%, #2bdc91 ${latencyDistribution[0]}% ${latencyDistribution[0] + latencyDistribution[1]}%, #ffd21f ${latencyDistribution[0] + latencyDistribution[1]}% ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2]}%, #a96cff ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2]}% ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2] + latencyDistribution[3]}%, #ff3d59 ${latencyDistribution[0] + latencyDistribution[1] + latencyDistribution[2] + latencyDistribution[3]}% 100%)` }}>
                   <strong>{network.latency}<small>ms</small></strong>
                 </div>
 
