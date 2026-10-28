@@ -268,39 +268,45 @@ function App() {
         const candidates = globalVisibleProbes
           .filter((probe) => Number.isFinite(probe.latitude) && Number.isFinite(probe.longitude))
           .sort((a, b) => a.id - b.id)
-        const routePairs: Array<[number, number]> = [
-          [0, Math.floor(candidates.length * 0.22)],
-          [Math.floor(candidates.length * 0.08), Math.floor(candidates.length * 0.48)],
-          [Math.floor(candidates.length * 0.18), Math.floor(candidates.length * 0.72)],
-          [Math.floor(candidates.length * 0.28), Math.floor(candidates.length * 0.88)],
-          [Math.floor(candidates.length * 0.38), Math.floor(candidates.length * 0.64)],
-          [Math.floor(candidates.length * 0.50), Math.floor(candidates.length * 0.94)],
-          [Math.floor(candidates.length * 0.12), Math.floor(candidates.length * 0.82)],
-          [Math.floor(candidates.length * 0.32), Math.floor(candidates.length * 0.76)],
-          [Math.floor(candidates.length * 0.04), Math.floor(candidates.length * 0.60)],
-          [Math.floor(candidates.length * 0.58), Math.floor(candidates.length * 0.90)],
-          [Math.floor(candidates.length * 0.16), Math.floor(candidates.length * 0.42)],
-          [Math.floor(candidates.length * 0.44), Math.floor(candidates.length * 0.80)],
-        ]
-        for (const [fromIndex, toIndex] of routePairs) {
+        const routeCount = Math.min(90, Math.floor(candidates.length * 0.45))
+        const usedPairs = new Set<string>()
+
+        for (let routeIndex = 0; routeIndex < routeCount; routeIndex++) {
+          const fromIndex = (routeIndex * 17 + Math.floor(candidates.length * 0.07)) % candidates.length
+          const toIndex = (routeIndex * 43 + Math.floor(candidates.length * 0.53)) % candidates.length
           const from = candidates[fromIndex]
           const to = candidates[toIndex]
           if (!from || !to || from.id === to.id) continue
+          const pairKey = [from.id, to.id].sort((a, b) => a - b).join("-")
+          if (usedPairs.has(pairKey)) continue
+          usedPairs.add(pairKey)
+
           const longitudeDelta = ((to.longitude - from.longitude + 540) % 360) - 180
           const latLngs: Array<[number, number]> = []
-          for (let step = 0; step <= 32; step++) {
-            const t = step / 32
-            const bend = Math.sin(Math.PI * t) * Math.min(18, Math.abs(longitudeDelta) * 0.12 + 4) * (from.latitude > to.latitude ? 1 : -1)
+          const bendDirection = routeIndex % 2 === 0 ? 1 : -1
+          const bendAmount = Math.min(22, Math.abs(longitudeDelta) * 0.16 + 5) * bendDirection
+          for (let step = 0; step <= 40; step++) {
+            const t = step / 40
+            const bend = Math.sin(Math.PI * t) * bendAmount
             latLngs.push([
-              from.latitude + (to.latitude - from.latitude) * t + bend,
+              Math.max(-85, Math.min(85, from.latitude + (to.latitude - from.latitude) * t + bend)),
               from.longitude + longitudeDelta * t,
             ])
           }
+
           L.polyline(latLngs, {
-            color: "#38e8b2",
-            weight: 1.6,
-            opacity: 0.72,
-            dashArray: "5 13",
+            color: "#19dca0",
+            weight: 4,
+            opacity: 0.12,
+            interactive: false,
+            className: "signal-route-glow",
+          }).addTo(markerLayer)
+          L.polyline(latLngs, {
+            color: routeIndex % 5 === 0 ? "#8affdf" : "#38e8b2",
+            weight: routeIndex % 5 === 0 ? 1.8 : 1.15,
+            opacity: 0.9,
+            dashArray: routeIndex % 4 === 0 ? "2 8" : "7 15",
+            dashOffset: String((routeIndex * 11) % 80),
             className: "signal-animated-route",
             interactive: false,
           }).addTo(markerLayer)
@@ -329,7 +335,7 @@ function App() {
       if (!disposed) setGlobalProbeError("Interactive map failed to load. Check the map library connection.")
     })
     return () => { disposed = true }
-  }, [selectedTopology, activePage, globalVisibleProbes, layers.nodes])
+  }, [selectedTopology, activePage, globalVisibleProbes, layers.nodes, layers.connections])
 
   useEffect(() => {
     const configuredUrl = import.meta.env.VITE_SIGNAL_WS_URL
