@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: signal-telemetry
+    runtime: node
+    plan: free
+    rootDir: signal
+    buildCommand: npm ci
+    startCommand: npm run server
+    healthCheckPath: /api/health
