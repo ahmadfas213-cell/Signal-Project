@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         working-directory: signal
         run: npm ci
+      - name: Check backend syntax
+        working-directory: signal
+        run: node --check server/server.js
       - name: Build
         working-directory: signal
         env:
