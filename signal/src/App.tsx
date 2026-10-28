@@ -264,6 +264,21 @@ function App() {
   }, [trafficHistory, network.traffic])
 
   const time = now.toLocaleTimeString("en-GB")
+  const simulatedCpu = Math.min(99, Math.max(8, Math.round(selected.latency * 0.55 + network.traffic / 100)))
+  const simulatedRam = Math.min(96, Math.max(24, Math.round(40 + selected.packetLoss * 7)))
+  const simulatedErrorRate = Number((selected.packetLoss * 1.8).toFixed(2))
+  const latencyDistribution = useMemo(() => {
+    const values = Object.values(runtime)
+    const total = Math.max(1, values.length)
+    const buckets = [
+      values.filter((item) => item.latency < 20).length,
+      values.filter((item) => item.latency >= 20 && item.latency < 50).length,
+      values.filter((item) => item.latency >= 50 && item.latency < 100).length,
+      values.filter((item) => item.latency >= 100 && item.latency <= 200).length,
+      values.filter((item) => item.latency > 200).length,
+    ]
+    return buckets.map((count) => Math.round((count / total) * 100))
+  }, [runtime])
 
   const runDiagnostic = (tool: "Ping" | "Traceroute" | "Packet Monitor" | "Performance Test") => {
     const timestamp = new Date().toLocaleTimeString("en-GB")
@@ -567,19 +582,19 @@ function App() {
                 <div className="info">
                   <small>INFORMATION</small>
                   <p>Name <b>{selectedNode.name}</b></p>
-                  <p>Location <b>{selectedNode.location}, ID</b></p>
-                  <p>IP Address <b>10.10.1.25</b></p>
-                  <p>Uptime <b>{Math.floor(selected.uptime)}d 7h 23m</b></p>
+                  <p>Location <b>{selectedNode.location}</b></p>
+                  <p>Node ID <b>{selectedNode.id}</b></p>
+                  <p>Uptime <b>{selected.uptime.toFixed(2)}%</b></p>
                   <p>Type <b>{selectedNode.type === "server" ? "Application Server" : selectedNode.type}</b></p>
 
                   <small>PERFORMANCE</small>
 
                   {[
-                    ["CPU", "78%", "blue"],
-                    ["RAM", "64%", "green"],
+                    ["Simulated CPU", `${simulatedCpu}%`, "blue"],
+                    ["Simulated RAM", `${simulatedRam}%`, "green"],
                     ["Latency", `${selected.latency}ms`, "green"],
                     ["Traffic", formatTraffic(network.traffic), "cyan"],
-                    ["Error Rate", "2.14%", "yellow"],
+                    ["Simulated Error Rate", `${simulatedErrorRate}%`, "yellow"],
                     ["Packet Loss", `${selected.packetLoss.toFixed(2)}%`, "purple"],
                   ].map(([label, value, tone], index) => (
                     <div className="metric" key={label}>
@@ -609,8 +624,8 @@ function App() {
                     <strong>{selected.latency}<small>ms</small></strong>
                   </div>
                   <div className="metric-grid">
-                    <div><span>CPU</span><b>78%</b></div>
-                    <div><span>RAM</span><b>64%</b></div>
+                    <div><span>SIM CPU</span><b>{simulatedCpu}%</b></div>
+                    <div><span>SIM RAM</span><b>{simulatedRam}%</b></div>
                     <div><span>TRAFFIC</span><b>{formatTraffic(network.traffic)}</b></div>
                     <div><span>LOSS</span><b>{selected.packetLoss.toFixed(2)}%</b></div>
                   </div>
@@ -676,11 +691,11 @@ function App() {
                 </div>
 
                 <div className="legend">
-                  <span><i className="cyan-dot" />&lt; 20ms <b>35%</b></span>
-                  <span><i className="green-dot" />20-50ms <b>40%</b></span>
-                  <span><i className="yellow-dot" />50-100ms <b>15%</b></span>
-                  <span><i className="purple-dot" />100-200ms <b>7%</b></span>
-                  <span><i className="red-dot" />&gt; 200ms <b>3%</b></span>
+                  <span><i className="cyan-dot" />&lt; 20ms <b>{latencyDistribution[0]}%</b></span>
+                  <span><i className="green-dot" />20-50ms <b>{latencyDistribution[1]}%</b></span>
+                  <span><i className="yellow-dot" />50-100ms <b>{latencyDistribution[2]}%</b></span>
+                  <span><i className="purple-dot" />100-200ms <b>{latencyDistribution[3]}%</b></span>
+                  <span><i className="red-dot" />&gt; 200ms <b>{latencyDistribution[4]}%</b></span>
                 </div>
               </div>
             </div>
@@ -711,10 +726,7 @@ function App() {
               </header>
 
               <div className="timeline-times">
-                <span>12:30</span>
-                <span>12:35</span>
-                <span>12:40</span>
-                <span>12:45</span>
+                {[15, 10, 5, 0].map((minutes) => <span key={minutes}>{new Date(now.getTime() - minutes * 60000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>)}
               </div>
 
               <div className="timeline-line">
@@ -722,9 +734,8 @@ function App() {
               </div>
 
               <div className="timeline-events">
-                <div><span className="yellow-badge">!</span><b>Database latency spike</b><small>12:40:12</small></div>
-                <div><span className="purple-badge">!</span><b>Packet loss detected</b><small>12:41:07</small></div>
-                <div><span className="blue-badge">i</span><b>High traffic</b><small>12:43:22</small></div>
+                {alerts.slice(0, 3).map((item, index) => <div key={`${item.time}-${item.text}-${index}`}><span className={item.tone === "red" ? "yellow-badge" : "purple-badge"}>!</span><b>{item.text}</b><small>{item.time}</small></div>)}
+                {!alerts.length && <div><span className="blue-badge">i</span><b>No active incidents</b><small>{time}</small></div>}
               </div>
 
               <button className="export" onClick={exportReport}>⇩ Export Report</button>
