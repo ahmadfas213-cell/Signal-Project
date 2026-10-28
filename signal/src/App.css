@@ -1753,18 +1753,29 @@ button {
 
 
 .signal-animated-route {
-  stroke-dasharray: 5 13;
-  animation: signal-route-flow 1.15s linear infinite;
-  filter: drop-shadow(0 0 3px rgba(56, 232, 178, 0.65));
+  stroke-dasharray: 7 15;
+  animation: signal-route-flow .72s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(56, 232, 178, .95));
+}
+
+.signal-route-glow {
+  filter: drop-shadow(0 0 7px rgba(25, 220, 160, .8));
+  animation: signal-route-pulse 1.8s ease-in-out infinite alternate;
 }
 
 @keyframes signal-route-flow {
-  from { stroke-dashoffset: 36; }
+  from { stroke-dashoffset: 88; }
   to { stroke-dashoffset: 0; }
 }
 
+@keyframes signal-route-pulse {
+  from { opacity: .08; }
+  to { opacity: .24; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .signal-animated-route {
+  .signal-animated-route,
+  .signal-route-glow {
     animation: none;
   }
 }
