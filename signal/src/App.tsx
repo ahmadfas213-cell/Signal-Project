@@ -321,6 +321,8 @@ function App() {
   }, [])
 
   const previousRuntime = useRef<Record<string, Runtime>>(initialRuntime)
+  const previousProbeStatuses = useRef<Record<string, string>>({})
+  const lastProbeSummaryAt = useRef(0)
 
   useEffect(() => { localStorage.setItem("signal-alerts-v1", JSON.stringify(alerts.slice(0, 100))) }, [alerts])
   useEffect(() => { localStorage.setItem("signal-acknowledged-v1", JSON.stringify(acknowledgedAlerts)) }, [acknowledgedAlerts])
@@ -429,6 +431,35 @@ function App() {
 
           const data: NetworkData = message.data
           setNetwork((current) => ({ ...data, latency: data.latency ?? current.latency, packetLoss: data.packetLoss ?? current.packetLoss }))
+
+          if (data.probes?.length) {
+            const timestamp = new Date(data.timestamp).toLocaleTimeString("en-GB")
+            const probeEvents = data.probes.flatMap((probe) => {
+              const previous = previousProbeStatuses.current[probe.id]
+              if (previous === undefined || previous === probe.status) return []
+              const tone = probe.status === "online" ? "green" : probe.status === "warning" ? "yellow" : "red"
+              return [{
+                time: timestamp,
+                tone,
+                text: `HTTP probe ${probe.name}: ${previous.toUpperCase()} → ${probe.status.toUpperCase()}`,
+              }]
+            })
+            if (probeEvents.length) setEventLog((current) => [...probeEvents, ...current].slice(0, 40))
+            previousProbeStatuses.current = Object.fromEntries(data.probes.map((probe) => [probe.id, probe.status]))
+
+            const nowMs = Date.now()
+            if (nowMs - lastProbeSummaryAt.current >= 30000) {
+              const online = data.probes.filter((probe) => probe.status === "online").length
+              const checked = data.probes.filter((probe) => probe.status !== "pending").length
+              const tone = checked > 0 && online === checked ? "green" : online === 0 ? "red" : "yellow"
+              setEventLog((current) => [{
+                time: timestamp,
+                tone,
+                text: `HTTP probe sweep: ${online}/${checked || data.probes.length} targets responding`,
+              }, ...current].slice(0, 40))
+              lastProbeSummaryAt.current = nowMs
+            }
+          }
 
           if (data.nodeData?.length) {
             const next: Record<string, Runtime> = { ...initialRuntime }
