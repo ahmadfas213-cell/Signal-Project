@@ -68,19 +68,6 @@ const nodes: NetworkNode[] = [
   { id: "mobile", name: "User Mobile", location: "Jakarta", type: "mobile", x: 26, y: 82 },
 ]
 
-const connections: [string, string][] = [
-  ["client", "router"],
-  ["client", "cdn"],
-  ["client", "mobile"],
-  ["router", "cdn"],
-  ["router", "api"],
-  ["router", "mobile"],
-  ["router", "monitor"],
-  ["api", "database"],
-  ["api", "cache"],
-  ["database", "backup"],
-  ["cache", "backup"],
-]
 
 const initialRuntime: Record<string, Runtime> = {
   client: { latency: 32, packetLoss: 0.12, uptime: 99.98, status: "online" },
