@@ -92,6 +92,27 @@ The same configured hostname is used by the frontend to derive the HTTP API base
 
 Free hosting may sleep when idle, so the first request after inactivity can take longer.
 
+## Troubleshooting
+
+### The dashboard shows demo data or cannot connect
+
+- Confirm that the backend service is running and that `GET /api/health` returns a healthy response.
+- For a hosted frontend, verify that the GitHub Actions variable `VITE_SIGNAL_WS_URL` contains the backend's `wss://` address.
+- Check the browser console and network panel for failed API requests or WebSocket connection errors.
+- If the backend uses a free hosting plan, allow for a cold start after a period of inactivity.
+
+### The frontend loads but live probe data is missing
+
+- Open `GET /api/probes` and `GET /api/global-probes` on the backend host to check whether the API endpoints respond.
+- Check the backend logs for outbound request failures or rate limits from external services.
+- Remember that RIPE Atlas registry entries describe probe locations. They do not provide live latency measurements by themselves.
+
+### Local development uses the wrong backend address
+
+- Start the backend before testing the frontend.
+- Confirm that the backend listens on port `3000`, unless the local configuration specifies another port.
+- In development, the frontend expects the local WebSocket endpoint `ws://localhost:3000`.
+
 ## Roadmap
 
 - [ ] Deploy and verify the hosted backend end to end.
