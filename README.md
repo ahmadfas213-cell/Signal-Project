@@ -1,131 +1,127 @@
 # SIGNAL
 
-**SIGNAL** is an open-source network observability dashboard built with React, TypeScript, Vite, Node.js, HTTP probes, and WebSockets. The long-term goal is a global network intelligence platform that clearly separates measured telemetry from illustrative/demo data.
+SIGNAL is a network monitoring dashboard built with React, TypeScript, Vite, and a Node.js backend.
 
-## Current capabilities
+The project collects a few real measurements, such as HTTP response times and the connection time between the browser and the SIGNAL server. Other parts of the dashboard are still using sample data. The sections below explain which is which.
 
-- Live HTTP reachability and response-time probes from the backend to Cloudflare, Google, GitHub, and Microsoft.
-- Browser-to-SIGNAL-server round-trip time measured with WebSocket ping/pong.
-- Global Internet view using active public probe locations from the RIPE Atlas registry.
-- Country filter for the currently loaded public probe sample.
-- Geographic world overview with real probe markers.
-- Exportable network report and event/incident panels.
-- GitHub Pages frontend deployment workflow and Render service blueprint.
+## What works now
 
-## Data integrity
+- Checks whether selected public endpoints respond and records their HTTP status and response time.
+- Measures browser-to-server round-trip time with WebSocket ping/pong.
+- Loads public RIPE Atlas probe locations for the global map.
+- Filters the loaded probe list by country.
+- Shows probe details such as location, country, ASN, and registry status.
+- Provides network reports and event panels.
+- Builds the frontend for GitHub Pages and includes a Render service configuration for the backend.
 
-SIGNAL intentionally distinguishes between measurements and visual/demo values.
+## Where the data comes from
 
-| Data | Source | Status |
+| Dashboard data | Source | Current status |
 | --- | --- | --- |
-| External endpoint response time | HTTP requests from backend | Live measurement |
-| External endpoint reachability / HTTP status | HTTP requests from backend | Live measurement |
-| Browser RTT to SIGNAL backend | WebSocket ping/pong | Live measurement |
-| Probe location, country, ASN, registry status | RIPE Atlas public probe registry | Live registry data |
+| External endpoint response time and HTTP status | Backend HTTP requests | Measured |
+| Browser-to-SIGNAL-server RTT | WebSocket ping/pong | Measured |
+| Probe location, country, ASN, and registry status | RIPE Atlas public registry | Live registry data |
 | Per-node latency and packet loss in the sample topology | Local demo model | Simulated |
 | Traffic chart and packet animations | Frontend demo model | Simulated |
-| Pairwise latency or routes between RIPE Atlas probes | Not currently collected | Not available; not inferred |
-| Wi-Fi/cellular radio signal strength in dBm | Not exposed by standard browser APIs | Not available |
+| Latency or routes between RIPE Atlas probes | Not collected yet | Unavailable |
+| Wi-Fi or cellular signal strength in dBm | Not exposed by standard browser APIs | Unavailable |
 
-The global view samples multiple pages of active public RIPE Atlas probes. It does **not** guarantee that every country is represented, and it does not mean SIGNAL is measuring every marker's latency. Probe registry locations are not a substitute for measurement results.
+The map uses a sample of active public RIPE Atlas probes. A marker only tells you where a registered probe is listed. It does not mean SIGNAL has measured that probe's latency. Country coverage can also vary depending on the returned sample.
 
-## Run locally
+## Run it locally
 
-Requirements: Node.js 22 or later and npm.
+Requirements: Node.js 22 or newer and npm.
 
-### 1. Install dependencies
+Install the dependencies:
 
 ```bash
 cd signal
 npm ci
 ```
 
-### 2. Start the backend
-
-In one terminal:
+Start the backend in one terminal:
 
 ```bash
 npm run server
 ```
 
-The backend listens on port `3000` by default.
+The backend uses port `3000` by default.
 
-### 3. Start the frontend
-
-In a second terminal, from the `signal` directory:
+Start the frontend in another terminal:
 
 ```bash
 npm run dev
 ```
 
-Open the local URL printed by Vite. In development, the frontend defaults to `ws://localhost:3000`.
+Open the local address printed by Vite. During development, the frontend connects to `ws://localhost:3000`.
 
-### Backend endpoints
+## Backend endpoints
 
-- `GET /api/health` - health status.
-- `GET /api/network` - combined telemetry snapshot.
-- `GET /api/probes` - external HTTP probe results.
-- `GET /api/global-probes` - cached active public RIPE Atlas probe locations.
+| Method and path | Description |
+| --- | --- |
+| `GET /api/health` | Backend health status |
+| `GET /api/network` | Combined telemetry snapshot |
+| `GET /api/probes` | Results from external HTTP checks |
+| `GET /api/global-probes` | Cached RIPE Atlas probe locations |
 
-The backend refreshes external HTTP probes approximately every 10 seconds and global registry data approximately every 5 minutes. Registry calls are cached in memory and use a bounded multi-page sample.
+External HTTP checks refresh about every 10 seconds. The global probe registry is refreshed about every 5 minutes. Registry results are cached in memory and fetched using a bounded, multi-page sample.
 
 ## Deployment
 
-### Frontend: GitHub Pages
+### Frontend on GitHub Pages
 
-The workflow at `.github/workflows/deploy.yml` builds `signal/` and deploys `signal/dist` to GitHub Pages after changes to the frontend or workflow.
+The workflow at `.github/workflows/deploy.yml` builds the `signal/` directory and publishes `signal/dist` to GitHub Pages when the frontend or workflow changes.
 
-### Backend: Render
+### Backend on Render
 
-The root `render.yaml` defines a Node web service using `signal/` as its root directory.
+The root `render.yaml` contains the Render Blueprint configuration. To connect the hosted frontend to the backend:
 
 1. Import this repository into Render as a Blueprint.
-2. Deploy the `signal-telemetry` web service.
-3. Copy the deployed service's HTTPS hostname.
-4. Convert the URL scheme to WebSocket form for the frontend variable:
-   - HTTPS service URL: `https://YOUR-SERVICE.onrender.com`
-   - WebSocket URL: `wss://YOUR-SERVICE.onrender.com`
-5. In GitHub, open **Settings → Secrets and variables → Actions → Variables** and add `VITE_SIGNAL_WS_URL` with the `wss://...` value.
-6. Rerun the **Deploy Signal to GitHub Pages** workflow.
+2. Deploy the `signal-telemetry` service.
+3. Copy the service's HTTPS address.
+4. Change the scheme from `https://` to `wss://`.
+5. In GitHub, open Settings → Secrets and variables → Actions → Variables.
+6. Add `VITE_SIGNAL_WS_URL` with the `wss://` address.
+7. Run the **Deploy Signal to GitHub Pages** workflow again.
 
-The same configured hostname is used by the frontend to derive the HTTP API base URL. Until the backend is deployed and the GitHub Actions variable is set, the public frontend cannot fetch live registry data or connect to the hosted telemetry WebSocket.
+The frontend uses this hostname to determine the HTTP API address too. Until the backend is deployed and the variable is set, the public site cannot load hosted telemetry or connect to the WebSocket.
 
-Free hosting may sleep when idle, so the first request after inactivity can take longer.
+A free hosting service may sleep while idle, so its first request can take longer.
 
 ## Troubleshooting
 
-### The dashboard shows demo data or cannot connect
+**The dashboard cannot connect**
 
-- Confirm that the backend service is running and that `GET /api/health` returns a healthy response.
-- For a hosted frontend, verify that the GitHub Actions variable `VITE_SIGNAL_WS_URL` contains the backend's `wss://` address.
-- Check the browser console and network panel for failed API requests or WebSocket connection errors.
-- If the backend uses a free hosting plan, allow for a cold start after a period of inactivity.
+- Check that the backend is running and that `GET /api/health` responds.
+- For the hosted site, check the `VITE_SIGNAL_WS_URL` repository variable.
+- Check the browser console and Network panel for failed requests or WebSocket errors.
+- If the backend is on a free plan, wait for the service to wake up.
 
-### The frontend loads but live probe data is missing
+**The global probe map is empty**
 
-- Open `GET /api/probes` and `GET /api/global-probes` on the backend host to check whether the API endpoints respond.
-- Check the backend logs for outbound request failures or rate limits from external services.
-- Remember that RIPE Atlas registry entries describe probe locations. They do not provide live latency measurements by themselves.
+- Open `/api/global-probes` on the backend host.
+- Check the backend logs for failed requests or rate limits.
+- Keep in mind that registry locations are not latency measurements.
 
-### Local development uses the wrong backend address
+**The local frontend uses the wrong backend**
 
-- Start the backend before testing the frontend.
-- Confirm that the backend listens on port `3000`, unless the local configuration specifies another port.
-- In development, the frontend expects the local WebSocket endpoint `ws://localhost:3000`.
+- Start the backend before opening the frontend.
+- Check that the backend is listening on port `3000`.
+- The local WebSocket address is `ws://localhost:3000`.
 
-## Roadmap
+## Next steps
 
-- [ ] Deploy and verify the hosted backend end to end.
-- [x] Expand global probe coverage across multiple registry pages and surface partial-fetch warnings.
-- [ ] Improve country coverage balance and show per-country sample freshness.
-- [ ] Add genuine RIPE Atlas latency measurements and traceroute data where public results and permissions allow.
-- [ ] Add historical persistence instead of session-only charts.
-- [ ] Add alert thresholds, incident acknowledgement, and configurable probe targets.
-- [x] Add country filtering to the global probe map.
-- [x] Add clickable probe detail views with coordinates, country, ASN, and registry status.
-- [ ] Add ASN filtering and latency overlays from actual public measurement results.
-- [ ] Add automated tests for API responses, telemetry calculations, and UI states.
-- [ ] Review dependency audit findings and establish a regular security update process.
+- [ ] Deploy and test the hosted backend from end to end.
+- [x] Load probe locations from multiple registry pages and report partial results.
+- [x] Filter the global probe map by country.
+- [x] Open probe details from map markers.
+- [ ] Improve country coverage and show when each sample was fetched.
+- [ ] Add actual RIPE Atlas latency measurements and traceroute data where available.
+- [ ] Store historical measurements instead of keeping charts session-only.
+- [ ] Add alert thresholds and incident acknowledgement.
+- [ ] Add ASN filtering and latency overlays based on measured results.
+- [ ] Add automated tests for API responses, calculations, and UI states.
+- [ ] Review dependency audit findings and keep dependencies updated.
 
 ## Project structure
 
@@ -144,4 +140,4 @@ Signal-Project/
 
 ## License
 
-No license has been declared yet. Until a license is added, assume the usual default copyright applies.
+No license has been added yet. Until one is added, the project remains under the default copyright terms.
